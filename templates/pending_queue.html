@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pending Requests</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen">
+        <h1>Pending Requests</h1>
+        <p class="subheading">{{ requests|length }} awaiting decision</p>
+
+        {% if not requests %}
+        <p class="hint">Nothing pending right now.</p>
+        {% endif %}
+
+        <div class="request-list">
+            {% for req in requests %}
+            <a href="{{ url_for('request_detail', request_id=req.id) }}" class="request-card">
+                <div class="request-card__top">
+                    <span class="badge badge-pending">{{ req.request_type }}</span>
+                    <span class="request-card__vessel">{{ req.vessel_name }}</span>
+                </div>
+                <div class="request-card__title">
+                    {% if req.request_type == 'New Job' %}
+                        {{ req.job_title or 'Untitled' }}
+                    {% else %}
+                        {{ req.existing_job_number or 'Job not found' }}
+                    {% endif %}
+                </div>
+                <div class="request-card__desc">{{ req.description }}</div>
+                <div class="request-card__meta">{{ req.requested_by }} &middot; {{ req.created_at }}</div>
+            </a>
+            {% endfor %}
+        </div>
+
+        <p class="nav-links">
+            <a href="{{ url_for('request_work_form') }}">Log a Request</a> &middot;
+            <a href="{{ url_for('request_history') }}">Request History</a>
+        </p>
+    </main>
+</body>
+</html>

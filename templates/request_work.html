@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request Work</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen">
+        <h1>Request Work</h1>
+        <p class="subheading">New job or a change to an existing one &mdash; we'll review it and get back to you.</p>
+
+        <form method="get" action="{{ url_for('request_work_form') }}">
+            <label for="vessel_id">Vessel</label>
+            <select id="vessel_id" name="vessel_id" onchange="this.form.submit()">
+                <option value="">Select a vessel...</option>
+                {% for vessel in vessels %}
+                <option value="{{ vessel.id }}" {% if selected_vessel_id == vessel.id %}selected{% endif %}>
+                    {{ vessel.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+
+        {% if selected_vessel_id %}
+        <form method="post" action="{{ url_for('submit_work_request') }}">
+            <input type="hidden" name="vessel_id" value="{{ selected_vessel_id }}">
+
+            <label>Type</label>
+            <div class="radio-row">
+                <label class="radio-option">
+                    <input type="radio" name="request_type" value="New Job" checked onchange="toggleRequestType()">
+                    New Job
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="request_type" value="Scope Change" onchange="toggleRequestType()">
+                    Scope Change
+                </label>
+            </div>
+
+            <div id="newJobField">
+                <label for="job_title">Job Title</label>
+                <input type="text" id="job_title" name="job_title" placeholder="e.g. Replace port shaft seal">
+            </div>
+
+            <div id="scopeChangeField" style="display:none">
+                <label for="job_id">Existing Job</label>
+                <select id="job_id" name="job_id">
+                    <option value="">Select a job...</option>
+                    {% for job in jobs %}
+                    <option value="{{ job.id }}">{{ job.job_number }}{% if job.job_title %} - {{ job.job_title }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+                {% if not jobs %}
+                <p class="hint">No existing jobs found for this vessel.</p>
+                {% endif %}
+            </div>
+
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="4" placeholder="What's being asked for?" required></textarea>
+
+            <label for="requested_by">Requested By</label>
+            <input type="text" id="requested_by" name="requested_by" placeholder="Your name" required>
+
+            <label for="requested_by_contact">Contact (optional)</label>
+            <input type="text" id="requested_by_contact" name="requested_by_contact" placeholder="Email or phone">
+
+            <label for="reason">Reason</label>
+            <select id="reason" name="reason" required>
+                {% for reason in reasons %}
+                <option value="{{ reason }}">{{ reason }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="estimated_cost">Estimated Cost (optional)</label>
+            <input type="number" id="estimated_cost" name="estimated_cost" inputmode="decimal" step="0.01" min="0">
+
+            <button type="submit" class="btn-primary btn-sticky">Submit Request</button>
+        </form>
+        {% endif %}
+
+        <p class="nav-links">
+            <a href="{{ url_for('pending_requests') }}">View Pending Queue</a> &middot;
+            <a href="{{ url_for('request_history') }}">Request History</a>
+        </p>
+    </main>
+
+    <script>
+        function toggleRequestType() {
+            var isNewJob = document.querySelector('input[name="request_type"]:checked').value === 'New Job';
+            document.getElementById('newJobField').style.display = isNewJob ? 'block' : 'none';
+            document.getElementById('scopeChangeField').style.display = isNewJob ? 'none' : 'block';
+        }
+    </script>
+</body>
+</html>

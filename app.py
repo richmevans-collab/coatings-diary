@@ -138,6 +138,217 @@ def confirmation(job_id):
     return render_template("confirmation.html", job=job)
 
 
+@app.route("/request-work")
+def request_work_form():
+    """Shared entry point: contractors submitting directly, or a PM quick-logging
+    a request that came in by phone/email. Same form, same work_requests row."""
+    conn = db.get_db()
+    vessels = conn.execute("SELECT * FROM vessels ORDER BY name").fetchall()
+
+    selected_vessel_id = request.args.get("vessel_id", type=int)
+    jobs = []
+    if selected_vessel_id:
+        jobs = conn.execute(
+            "SELECT * FROM jobs WHERE vessel_id = ? ORDER BY job_number",
+            (selected_vessel_id,),
+        ).fetchall()
+    conn.close()
+
+    return render_template(
+        "request_work.html",
+        vessels=vessels,
+        jobs=jobs,
+        selected_vessel_id=selected_vessel_id,
+        reasons=db.REQUEST_REASONS,
+    )
+
+
+@app.route("/request-work", methods=["POST"])
+def submit_work_request():
+    vessel_id = request.form.get("vessel_id", type=int)
+    request_type = request.form.get("request_type")
+    job_id = request.form.get("job_id", type=int) if request_type == "Scope Change" else None
+    job_title = request.form.get("job_title", "").strip() if request_type == "New Job" else None
+    description = request.form.get("description", "").strip()
+    requested_by = request.form.get("requested_by", "").strip()
+    requested_by_contact = request.form.get("requested_by_contact", "").strip() or None
+    reason = request.form.get("reason")
+    cost_raw = request.form.get("estimated_cost", "").strip()
+    estimated_cost = float(cost_raw) if cost_raw else None
+
+    conn = db.get_db()
+    cur = conn.execute(
+        """INSERT INTO work_requests
+           (vessel_id, request_type, job_id, job_title, description, requested_by,
+            requested_by_contact, reason, estimated_cost)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (vessel_id, request_type, job_id, job_title, description, requested_by,
+         requested_by_contact, reason, estimated_cost),
+    )
+    conn.commit()
+    request_id = cur.lastrowid
+    conn.close()
+
+    return redirect(url_for("request_work_confirmation", request_id=request_id))
+
+
+@app.route("/request-work/confirmation/<int:request_id>")
+def request_work_confirmation(request_id):
+    conn = db.get_db()
+    work_request = conn.execute(
+        """SELECT work_requests.*, vessels.name AS vessel_name
+           FROM work_requests JOIN vessels ON work_requests.vessel_id = vessels.id
+           WHERE work_requests.id = ?""",
+        (request_id,),
+    ).fetchone()
+    conn.close()
+
+    if work_request is None:
+        return redirect(url_for("request_work_form"))
+
+    return render_template("request_work_confirmation.html", req=work_request)
+
+
+def _fetch_request_detail(conn, request_id):
+    return conn.execute(
+        """SELECT work_requests.*, vessels.name AS vessel_name,
+                  jobs.job_number AS existing_job_number,
+                  jobs.job_title AS existing_job_title
+           FROM work_requests
+           JOIN vessels ON work_requests.vessel_id = vessels.id
+           LEFT JOIN jobs ON work_requests.job_id = jobs.id
+           WHERE work_requests.id = ?""",
+        (request_id,),
+    ).fetchone()
+
+
+@app.route("/requests/pending")
+def pending_requests():
+    conn = db.get_db()
+    pending = conn.execute(
+        """SELECT work_requests.*, vessels.name AS vessel_name,
+                  jobs.job_number AS existing_job_number
+           FROM work_requests
+           JOIN vessels ON work_requests.vessel_id = vessels.id
+           LEFT JOIN jobs ON work_requests.job_id = jobs.id
+           WHERE work_requests.status = 'Pending'
+           ORDER BY work_requests.created_at ASC"""
+    ).fetchall()
+    conn.close()
+    return render_template("pending_queue.html", requests=pending)
+
+
+@app.route("/requests/<int:request_id>")
+def request_detail(request_id):
+    conn = db.get_db()
+    work_request = _fetch_request_detail(conn, request_id)
+    conn.close()
+
+    if work_request is None:
+        return redirect(url_for("pending_requests"))
+
+    return render_template("request_detail.html", req=work_request)
+
+
+@app.route("/requests/<int:request_id>/approve", methods=["POST"])
+def approve_request(request_id):
+    conn = db.get_db()
+    work_request = conn.execute("SELECT * FROM work_requests WHERE id = ?", (request_id,)).fetchone()
+    if work_request is None:
+        conn.close()
+        return redirect(url_for("pending_requests"))
+
+    pm_notes = request.form.get("pm_notes", "").strip() or None
+
+    if work_request["request_type"] == "New Job":
+        job_number = db.generate_job_number(conn)
+        cur = conn.execute(
+            """INSERT INTO jobs (vessel_id, job_number, job_title, scope, status)
+               VALUES (?, ?, ?, ?, 'Open')""",
+            (work_request["vessel_id"], job_number, work_request["job_title"],
+             work_request["description"]),
+        )
+        new_job_id = cur.lastrowid
+        conn.execute(
+            """UPDATE work_requests
+               SET status = 'Approved', job_id = ?, pm_notes = ?, reviewed_at = datetime('now', 'localtime')
+               WHERE id = ?""",
+            (new_job_id, pm_notes, request_id),
+        )
+    else:  # Scope Change
+        job = conn.execute("SELECT * FROM jobs WHERE id = ?", (work_request["job_id"],)).fetchone()
+        if job is not None:
+            updated_scope = f"{job['scope']}\n---\n{work_request['description']}" if job["scope"] else work_request["description"]
+            conn.execute(
+                "UPDATE jobs SET scope = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+                (updated_scope, job["id"]),
+            )
+        conn.execute(
+            """UPDATE work_requests
+               SET status = 'Approved', pm_notes = ?, reviewed_at = datetime('now', 'localtime')
+               WHERE id = ?""",
+            (pm_notes, request_id),
+        )
+
+    conn.commit()
+    conn.close()
+    return redirect(url_for("request_detail", request_id=request_id))
+
+
+@app.route("/requests/<int:request_id>/reject", methods=["POST"])
+def reject_request(request_id):
+    pm_notes = request.form.get("pm_notes", "").strip() or None
+    conn = db.get_db()
+    conn.execute(
+        """UPDATE work_requests
+           SET status = 'Rejected', pm_notes = ?, reviewed_at = datetime('now', 'localtime')
+           WHERE id = ?""",
+        (pm_notes, request_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("request_detail", request_id=request_id))
+
+
+@app.route("/requests/history")
+def request_history():
+    vessel_id = request.args.get("vessel_id", type=int)
+    request_type = request.args.get("request_type") or None
+    status = request.args.get("status") or None
+
+    query = """SELECT work_requests.*, vessels.name AS vessel_name,
+                      jobs.job_number AS existing_job_number
+               FROM work_requests
+               JOIN vessels ON work_requests.vessel_id = vessels.id
+               LEFT JOIN jobs ON work_requests.job_id = jobs.id
+               WHERE 1=1"""
+    params = []
+    if vessel_id:
+        query += " AND work_requests.vessel_id = ?"
+        params.append(vessel_id)
+    if request_type:
+        query += " AND work_requests.request_type = ?"
+        params.append(request_type)
+    if status:
+        query += " AND work_requests.status = ?"
+        params.append(status)
+    query += " ORDER BY work_requests.created_at DESC"
+
+    conn = db.get_db()
+    vessels = conn.execute("SELECT * FROM vessels ORDER BY name").fetchall()
+    results = conn.execute(query, params).fetchall()
+    conn.close()
+
+    return render_template(
+        "request_history.html",
+        requests=results,
+        vessels=vessels,
+        selected_vessel_id=vessel_id,
+        selected_request_type=request_type,
+        selected_status=status,
+    )
+
+
 if __name__ == "__main__":
     db.setup()
     app.run(host="0.0.0.0", port=5000, debug=True)

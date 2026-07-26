@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request Submitted</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen screen-centered">
+        <p class="checkmark">&#10003;</p>
+        <h1>Request submitted</h1>
+        <p class="subheading">We'll review it and get back to you.</p>
+        <p class="subheading">{{ req.vessel_name }} &middot; {{ req.request_type }}</p>
+
+        <a href="{{ url_for('request_work_form') }}" class="btn-primary">Submit another request</a>
+        <a href="{{ url_for('pending_requests') }}" class="btn-secondary">View Pending Queue</a>
+    </main>
+</body>
+</html>

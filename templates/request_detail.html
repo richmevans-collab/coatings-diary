@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request Detail</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen">
+        <h1>{{ req.request_type }}</h1>
+        <p class="subheading">
+            {{ req.vessel_name }}
+            {% if req.request_type == 'New Job' %}
+                &middot; {{ req.job_title or 'Untitled' }}
+            {% else %}
+                &middot; {{ req.existing_job_number or 'Job not found' }}{% if req.existing_job_title %} - {{ req.existing_job_title }}{% endif %}
+            {% endif %}
+        </p>
+
+        <span class="badge badge-{{ req.status|lower }}">{{ req.status }}</span>
+
+        <label>Description</label>
+        <p class="detail-text">{{ req.description }}</p>
+
+        <label>Reason</label>
+        <p class="detail-text">{{ req.reason }}</p>
+
+        <label>Requested By</label>
+        <p class="detail-text">{{ req.requested_by }}{% if req.requested_by_contact %} ({{ req.requested_by_contact }}){% endif %}</p>
+
+        {% if req.estimated_cost %}
+        <label>Estimated Cost</label>
+        <p class="detail-text">${{ "%.2f"|format(req.estimated_cost) }}</p>
+        {% endif %}
+
+        <label>Logged</label>
+        <p class="detail-text">{{ req.created_at }}</p>
+
+        {% if req.status == 'Pending' %}
+        <form method="post" id="decisionForm">
+            <label for="pm_notes">PM Notes</label>
+            <textarea id="pm_notes" name="pm_notes" rows="3" placeholder="Approval notes or rejection reason"></textarea>
+
+            <div class="decision-row">
+                <button type="submit" formaction="{{ url_for('reject_request', request_id=req.id) }}" class="btn-secondary">Reject</button>
+                <button type="submit" formaction="{{ url_for('approve_request', request_id=req.id) }}" class="btn-primary">Approve</button>
+            </div>
+        </form>
+        {% else %}
+        {% if req.pm_notes %}
+        <label>PM Notes</label>
+        <p class="detail-text">{{ req.pm_notes }}</p>
+        {% endif %}
+        <label>Decision Date</label>
+        <p class="detail-text">{{ req.reviewed_at }}</p>
+        {% endif %}
+
+        <p class="nav-links">
+            <a href="{{ url_for('pending_requests') }}">Pending Queue</a> &middot;
+            <a href="{{ url_for('request_history') }}">Request History</a>
+        </p>
+    </main>
+</body>
+</html>

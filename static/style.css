@@ -116,3 +116,150 @@ input:focus {
     color: #1a9e4e;
     margin: 0;
 }
+
+textarea {
+    width: 100%;
+    padding: 14px;
+    font-size: 18px;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    background: #fff;
+    font-family: inherit;
+    resize: vertical;
+}
+
+textarea:focus {
+    outline: none;
+    border-color: #0b5fff;
+}
+
+.radio-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.radio-option {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    background: #fff;
+    font-weight: 500;
+    margin: 0;
+    cursor: pointer;
+}
+
+.nav-links {
+    text-align: center;
+    margin-top: 32px;
+    font-size: 15px;
+}
+
+.nav-links a {
+    color: #0b5fff;
+    text-decoration: none;
+}
+
+.filter-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.filter-row select {
+    margin: 0;
+}
+
+.request-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.request-card {
+    display: block;
+    background: #fff;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 16px;
+    text-decoration: none;
+    color: inherit;
+}
+
+.request-card__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.request-card__vessel {
+    font-weight: 600;
+    color: #555;
+}
+
+.request-card__title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.request-card__desc {
+    color: #444;
+    font-size: 15px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.request-card__meta {
+    color: #888;
+    font-size: 13px;
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.badge-pending {
+    background: #fff3cd;
+    color: #8a6414;
+}
+
+.badge-approved {
+    background: #d4edda;
+    color: #1a6e2e;
+}
+
+.badge-rejected {
+    background: #f8d7da;
+    color: #a3232f;
+}
+
+.detail-text {
+    margin: 0 0 4px;
+    font-size: 17px;
+    color: #222;
+}
+
+.decision-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.decision-row .btn-primary,
+.decision-row .btn-secondary {
+    margin-top: 0;
+}

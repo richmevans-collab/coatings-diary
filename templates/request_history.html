@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request &amp; Job History</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen">
+        <h1>Request &amp; Job History</h1>
+
+        <form method="get" action="{{ url_for('request_history') }}" class="filter-row">
+            <select name="vessel_id" onchange="this.form.submit()">
+                <option value="">All Vessels</option>
+                {% for vessel in vessels %}
+                <option value="{{ vessel.id }}" {% if selected_vessel_id == vessel.id %}selected{% endif %}>{{ vessel.name }}</option>
+                {% endfor %}
+            </select>
+
+            <select name="request_type" onchange="this.form.submit()">
+                <option value="">All Types</option>
+                <option value="New Job" {% if selected_request_type == 'New Job' %}selected{% endif %}>New Job</option>
+                <option value="Scope Change" {% if selected_request_type == 'Scope Change' %}selected{% endif %}>Scope Change</option>
+            </select>
+
+            <select name="status" onchange="this.form.submit()">
+                <option value="">All Statuses</option>
+                <option value="Pending" {% if selected_status == 'Pending' %}selected{% endif %}>Pending</option>
+                <option value="Approved" {% if selected_status == 'Approved' %}selected{% endif %}>Approved</option>
+                <option value="Rejected" {% if selected_status == 'Rejected' %}selected{% endif %}>Rejected</option>
+            </select>
+        </form>
+
+        <p class="subheading">{{ requests|length }} request(s)</p>
+
+        {% if not requests %}
+        <p class="hint">No requests match these filters.</p>
+        {% endif %}
+
+        <div class="request-list">
+            {% for req in requests %}
+            <a href="{{ url_for('request_detail', request_id=req.id) }}" class="request-card">
+                <div class="request-card__top">
+                    <span class="badge badge-{{ req.status|lower }}">{{ req.status }}</span>
+                    <span class="request-card__vessel">{{ req.vessel_name }}</span>
+                </div>
+                <div class="request-card__title">
+                    {{ req.request_type }} &middot;
+                    {% if req.request_type == 'New Job' %}
+                        {{ req.job_title or 'Untitled' }}
+                    {% else %}
+                        {{ req.existing_job_number or 'Job not found' }}
+                    {% endif %}
+                </div>
+                <div class="request-card__meta">{{ req.requested_by }} &middot; {{ req.created_at }}</div>
+            </a>
+            {% endfor %}
+        </div>
+
+        <p class="nav-links">
+            <a href="{{ url_for('request_work_form') }}">Log a Request</a> &middot;
+            <a href="{{ url_for('pending_requests') }}">Pending Queue</a>
+        </p>
+    </main>
+</body>
+</html>
