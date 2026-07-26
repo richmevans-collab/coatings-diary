@@ -3,3 +3,5 @@ __pycache__/
 coatings_diary.db
 uploads/*
 !uploads/.gitkeep
+generated_pdfs/
+painter_jobs_cache.json

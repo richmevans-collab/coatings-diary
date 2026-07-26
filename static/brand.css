@@ -1,0 +1,349 @@
+/* Shared brand system with the Orams estimate tool (webapp/styles.css) -
+   same palette/typography so the two feel like one product, even though
+   they're separate deployments/repos. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --navy: #0a1f4d;
+  --navy-grad: #1c3670;
+  --red: #c8313a;
+  --red-hover: #a32530;
+  --bg: #f4f5f7;
+  --bg-alt: #eceef2;
+  --white: #ffffff;
+  --divider: #e2e4e9;
+  --muted: #8a8f9a;
+  --disabled-text: #b7bac2;
+  --dark: #1a1f2e;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--dark);
+}
+
+/* ── Shared nav shell ────────────────────────────────────────────────── */
+
+.brand-header {
+  background: var(--white);
+  padding: 20px 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 10px rgba(10, 20, 50, .04);
+}
+
+.brand-header__left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-header__wordmark {
+  font: 800 17px Inter, sans-serif;
+  color: var(--navy);
+  letter-spacing: -.01em;
+}
+
+.brand-header__divider {
+  width: 1px;
+  height: 22px;
+  background: var(--divider);
+}
+
+.brand-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.brand-tab {
+  font: 600 13px Inter, sans-serif;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border-bottom: 2px solid transparent;
+}
+
+.brand-tab:hover {
+  color: var(--navy);
+  background: var(--bg);
+}
+
+.brand-tab--active {
+  color: var(--navy);
+  border-bottom: 2px solid var(--red);
+}
+
+.brand-body {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 30px 36px 60px;
+}
+
+.brand-body--narrow {
+  max-width: 720px;
+}
+
+.brand-title {
+  font: 800 24px Inter, sans-serif;
+  color: var(--navy);
+  margin: 0 0 4px;
+}
+
+.brand-subtitle {
+  font: 400 13.5px Inter, sans-serif;
+  color: var(--muted);
+  margin: 0 0 28px;
+}
+
+/* ── Cards / panels ──────────────────────────────────────────────────── */
+
+.brand-panel {
+  background: var(--white);
+  border-radius: 16px;
+  padding: 22px 24px;
+  box-shadow: 0 2px 4px rgba(10, 20, 50, .04), 0 14px 30px -14px rgba(10, 20, 50, .2);
+  margin-bottom: 20px;
+}
+
+.brand-panel__title {
+  font: 700 13px Inter, sans-serif;
+  color: var(--navy);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin: 0 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--divider);
+}
+
+/* ── Form fields ─────────────────────────────────────────────────────── */
+
+.brand-field-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.brand-field {
+  flex: 1;
+  min-width: 180px;
+  margin-bottom: 14px;
+}
+
+.brand-field__label {
+  display: block;
+  font: 700 11px Inter, sans-serif;
+  color: var(--navy);
+  margin-bottom: 6px;
+}
+
+.brand-input,
+.brand-select,
+.brand-textarea {
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font: 400 13.5px Inter, sans-serif;
+  color: var(--dark);
+  background: var(--bg);
+}
+
+.brand-input:focus,
+.brand-select:focus,
+.brand-textarea:focus {
+  outline: 2px solid var(--red);
+  outline-offset: -1px;
+}
+
+.brand-textarea { resize: vertical; }
+
+.brand-hint {
+  font: 400 12px Inter, sans-serif;
+  color: var(--muted);
+  margin-top: -8px;
+  margin-bottom: 14px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+
+.brand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  height: 42px;
+  padding: 0 22px;
+  font: 700 13.5px Inter, sans-serif;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.brand-btn--red {
+  background: linear-gradient(160deg, var(--red), var(--red-hover));
+  color: var(--white);
+  box-shadow: 0 12px 22px -8px rgba(200, 49, 58, .55);
+}
+.brand-btn--red:hover { filter: brightness(1.05); }
+
+.brand-btn--navy {
+  background: linear-gradient(160deg, var(--navy), var(--navy-grad));
+  color: var(--white);
+  box-shadow: 0 12px 22px -8px rgba(10, 31, 77, .5);
+}
+.brand-btn--navy:hover { filter: brightness(1.1); }
+
+.brand-btn--white {
+  background: var(--white);
+  color: var(--navy);
+  box-shadow: 0 2px 4px rgba(10, 20, 50, .04), 0 6px 14px -6px rgba(10, 20, 50, .12);
+}
+.brand-btn--white:hover { background: var(--bg); }
+
+.brand-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.brand-action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* ── Job list / cards ────────────────────────────────────────────────── */
+
+.brand-job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.brand-job-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--white);
+  border-radius: 14px;
+  padding: 16px 20px;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: 0 2px 4px rgba(10, 20, 50, .04), 0 10px 22px -12px rgba(10, 20, 50, .18);
+}
+.brand-job-card:hover { box-shadow: 0 2px 4px rgba(10, 20, 50, .06), 0 14px 26px -10px rgba(10, 20, 50, .24); }
+
+.brand-job-card__number {
+  font: 700 14px Inter, sans-serif;
+  color: var(--navy);
+}
+
+.brand-job-card__desc {
+  font: 400 12.5px Inter, sans-serif;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.stage-dots {
+  display: flex;
+  gap: 5px;
+  flex: none;
+}
+
+.stage-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--bg-alt);
+  border: 1px solid var(--divider);
+}
+
+.stage-dot--done {
+  background: var(--red);
+  border-color: var(--red);
+}
+
+/* ── Photo chips ─────────────────────────────────────────────────────── */
+
+.photo-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.photo-chip {
+  width: 84px;
+  height: 84px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(10, 20, 50, .12);
+}
+
+.photo-chip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── Summary grid ────────────────────────────────────────────────────── */
+
+.summary-table-wrap { overflow-x: auto; }
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.summary-table th,
+.summary-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--divider);
+  white-space: nowrap;
+}
+
+.summary-table th {
+  background: var(--bg-alt);
+  color: var(--navy);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.summary-table__check { color: var(--red); font-weight: 700; text-align: center; }
+.summary-table__blank { color: var(--disabled-text); text-align: center; }
+
+.brand-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font: 700 11px Inter, sans-serif;
+  background: var(--bg-alt);
+  color: var(--muted);
+}
+
+.brand-flash {
+  background: #fdf2f3;
+  border: 1px solid #f3c9cc;
+  color: var(--red-hover);
+  padding: 10px 16px;
+  border-radius: 10px;
+  font: 500 13px Inter, sans-serif;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 640px) {
+  .brand-header, .brand-body { padding-left: 18px; padding-right: 18px; }
+  .brand-header__wordmark, .brand-header__divider { display: none; }
+}

@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS vessels (
     name TEXT NOT NULL
 );
 
+-- description/client/painter/inspector/reference_documents and
+-- sheet_id/sheet_row_id are v3 additions: description/sheet_id/sheet_row_id
+-- are synced live from the vessel's Sign Off & Changes sheet in Smartsheet
+-- (see smartsheet_client.get_painter_jobs + sync_jobs_from_smartsheet in
+-- app.py); the rest are filled in locally by whoever logs the first stage.
 CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     vessel_id INTEGER NOT NULL,
@@ -22,11 +27,21 @@ CREATE TABLE IF NOT EXISTS jobs (
     job_title TEXT,
     scope TEXT,
     status TEXT NOT NULL DEFAULT 'Open',
+    description TEXT,
+    client TEXT,
+    painter TEXT,
+    inspector TEXT,
+    reference_documents TEXT,
+    sheet_id TEXT,
+    sheet_row_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (vessel_id) REFERENCES vessels(id)
 );
 
+-- Superseded by stage_entries/stage_photos (v3) - left in place (unused) so
+-- nothing breaks for anyone still holding a reference to old rows; no new
+-- code reads or writes this table.
 CREATE TABLE IF NOT EXISTS coating_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     job_id INTEGER NOT NULL,
@@ -40,6 +55,66 @@ CREATE TABLE IF NOT EXISTS coating_entries (
     tin_photo_filename TEXT,
     coat_number INTEGER,
     FOREIGN KEY (job_id) REFERENCES jobs(id)
+);
+
+-- One row per stage per job. stage is one of: substrate, coat_1, coat_2,
+-- coat_3, coat_4. Surface Preparation fields are typically only filled at
+-- the substrate stage - left nullable/skippable for coat stages.
+CREATE TABLE IF NOT EXISTS stage_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+    stage TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+
+    -- Climate Data
+    date_time TEXT,
+    conditions TEXT,
+    rh_percent REAL,
+    air_temp REAL,
+    dew_point REAL,
+    surface_temp REAL,
+    paint_yes_no TEXT,
+
+    -- Surface Preparation
+    prep_date_time TEXT,
+    cleanliness TEXT,
+    profile_sanding TEXT,
+
+    -- Paint / Application
+    paint_date_time TEXT,
+    product_name TEXT,
+    batch_no_a TEXT,
+    batch_no_b TEXT,
+    thinning_percent REAL,
+    thinning_product TEXT,
+    volume_litres REAL,
+    induction_time TEXT,
+    recoat_time_min TEXT,
+    recoat_time_max TEXT,
+    wft REAL,
+
+    -- DFT & Inspection
+    dft_date_time TEXT,
+    dft_readings TEXT,
+    dft_min REAL,
+    dft_max REAL,
+    dft_average REAL,
+    dft_std_dev REAL,
+    appearance TEXT,
+    pass_fail_repair TEXT,
+
+    FOREIGN KEY (job_id) REFERENCES jobs(id),
+    UNIQUE (job_id, stage)
+);
+
+-- General-purpose photo attachments (tin, surface condition, defects,
+-- progress shots, ...) - zero or more per stage entry, no categorisation.
+CREATE TABLE IF NOT EXISTS stage_photos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stage_entry_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (stage_entry_id) REFERENCES stage_entries(id)
 );
 
 CREATE TABLE IF NOT EXISTS work_requests (
@@ -120,6 +195,15 @@ CREATE TABLE IF NOT EXISTS consumables_log (
 REQUEST_REASONS = ["New Work", "Design Change", "Damage Found", "Clarification", "Other"]
 TRADE_ROLES = ["Boat Builder", "Apprentice", "Fabricator", "Finisher", "Other"]
 
+STAGES = ["substrate", "coat_1", "coat_2", "coat_3", "coat_4"]
+STAGE_LABELS = {
+    "substrate": "Substrate",
+    "coat_1": "Coat 1",
+    "coat_2": "Coat 2",
+    "coat_3": "Coat 3",
+    "coat_4": "Coat 4",
+}
+
 SEED_VESSELS = ["Pangaea", "Fidelis", "Aegle", "Bundalong"]
 
 # A couple of test jobs per vessel so the app has something to select on first run.
@@ -190,9 +274,24 @@ def migrate_jobs_table(conn):
     conn.commit()
 
 
+def migrate_jobs_table_v3(conn):
+    """Additive: adds the v3 columns (description, client, painter, inspector,
+    reference_documents, sheet_id, sheet_row_id) to an existing jobs table.
+    All nullable, so a plain ALTER TABLE ADD COLUMN is safe - no rebuild
+    needed like migrate_jobs_table's area-NOT-NULL fix required."""
+    columns = [row[1] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()]
+    if not columns or "description" in columns:
+        return  # fresh DB (SCHEMA below will create it) or already migrated
+    for column in ("description", "client", "painter", "inspector",
+                   "reference_documents", "sheet_id", "sheet_row_id"):
+        conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} TEXT")
+    conn.commit()
+
+
 def init_db():
     conn = get_db()
     migrate_jobs_table(conn)
+    migrate_jobs_table_v3(conn)
     conn.executescript(SCHEMA)
     conn.commit()
     conn.close()

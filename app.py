@@ -1,22 +1,29 @@
 """
-Coatings Diary - phone-first web form for painters to log coating data per coat.
-Replaces the paper "Coatings Diary" sheet. See coatings-diary-app-spec.md for the full spec.
+Coatings Diary - Orams Marine web app for painters/PMs to log stage-by-stage
+coating data per job (Substrate, Coat 1-4), replacing the paper "Coatings
+Diary" sheet, plus the Request Work, Boat Builder Estimate, and Equipment
+Log modules that extend the same SQLite database. See specs/ for each
+module's build spec.
 
 Run locally with: python app.py
-Then open http://<your-laptop-ip>:5000 on a phone on the same wifi network.
+Then open http://<your-laptop-ip>:5000 on a phone/laptop on the same wifi.
 """
 import math
+import statistics
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 
 import db
+import smartsheet_client
+import pdf_generator
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = Path(__file__).parent / "uploads"
+GENERATED_PDF_FOLDER = Path(__file__).parent / "generated_pdfs"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "heic", "webp"}
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB, plenty for a phone photo
@@ -35,19 +42,92 @@ def calculate_dew_point(air_temp, humidity):
     return round((b * alpha) / (a - alpha), 1)
 
 
+def calc_dft_stats(dft_readings_raw):
+    """Parses a comma/semicolon-separated list of spot DFT readings into
+    (min, max, average, std_dev). Returns all-None if nothing parses."""
+    if not dft_readings_raw:
+        return None, None, None, None
+    values = []
+    for piece in dft_readings_raw.replace(";", ",").split(","):
+        piece = piece.strip()
+        if not piece:
+            continue
+        try:
+            values.append(float(piece))
+        except ValueError:
+            continue
+    if not values:
+        return None, None, None, None
+    dft_average = round(sum(values) / len(values), 1)
+    dft_std_dev = round(statistics.stdev(values), 1) if len(values) > 1 else 0.0
+    return min(values), max(values), dft_average, dft_std_dev
+
+
+def sync_jobs_from_smartsheet(conn, force_refresh=False):
+    """Upserts the local jobs table from the live painter job list on
+    Smartsheet (job number + description + which row a PDF should attach
+    to later). Returns an error message string on failure, None on
+    success - the Start screen shows the error as a banner but still
+    renders whatever is already in the local jobs table."""
+    try:
+        jobs_by_vessel = smartsheet_client.get_painter_jobs(force_refresh=force_refresh)
+    except Exception as e:
+        return str(e)
+
+    vessel_rows = conn.execute("SELECT id, name FROM vessels").fetchall()
+    vessel_id_by_name = {v["name"]: v["id"] for v in vessel_rows}
+
+    for vessel_name, job_list in jobs_by_vessel.items():
+        vessel_id = vessel_id_by_name.get(vessel_name)
+        if vessel_id is None:
+            continue  # a vessel in Smartsheet that isn't set up locally yet
+
+        for job in job_list:
+            existing = conn.execute(
+                "SELECT id FROM jobs WHERE vessel_id = ? AND job_number = ?",
+                (vessel_id, job["job_number"]),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """UPDATE jobs SET description = ?, sheet_id = ?, sheet_row_id = ?,
+                       updated_at = datetime('now', 'localtime') WHERE id = ?""",
+                    (job.get("description"), str(job.get("sheet_id")), str(job.get("row_id")), existing["id"]),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO jobs (vessel_id, job_number, description, sheet_id, sheet_row_id)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (vessel_id, job["job_number"], job.get("description"),
+                     str(job.get("sheet_id")), str(job.get("row_id"))),
+                )
+    conn.commit()
+    return None
+
+
+def _job_stage_progress(conn, job_id):
+    """Returns {stage: True/False} for whether that stage has a logged entry."""
+    done = {row["stage"] for row in conn.execute(
+        "SELECT stage FROM stage_entries WHERE job_id = ?", (job_id,)
+    ).fetchall()}
+    return {stage: (stage in done) for stage in db.STAGES}
+
+
 @app.route("/")
 def start():
-    """Screen 1: pick a vessel, then a job for that vessel."""
+    """Screen 1: pick a vessel, then see its jobs (live from Smartsheet) with stage progress."""
     conn = db.get_db()
     vessels = conn.execute("SELECT * FROM vessels ORDER BY name").fetchall()
 
     selected_vessel_id = request.args.get("vessel_id", type=int)
+    sync_error = None
     jobs = []
     if selected_vessel_id:
-        jobs = conn.execute(
-            "SELECT * FROM jobs WHERE vessel_id = ? ORDER BY job_number, area",
+        sync_error = sync_jobs_from_smartsheet(conn, force_refresh=request.args.get("refresh") == "1")
+        job_rows = conn.execute(
+            "SELECT * FROM jobs WHERE vessel_id = ? ORDER BY job_number",
             (selected_vessel_id,),
         ).fetchall()
+        jobs = [dict(job, stage_progress=_job_stage_progress(conn, job["id"])) for job in job_rows]
     conn.close()
 
     return render_template(
@@ -55,12 +135,30 @@ def start():
         vessels=vessels,
         jobs=jobs,
         selected_vessel_id=selected_vessel_id,
+        sync_error=sync_error,
+        stages=db.STAGES,
     )
 
 
-@app.route("/log-coat/<int:job_id>")
-def log_coat_form(job_id):
-    """Screen 2: the core coat-logging form for a given job."""
+@app.route("/jobs/<int:job_id>")
+def job_router(job_id):
+    """Selecting a job: jump to its first incomplete stage, or the summary if all are logged."""
+    conn = db.get_db()
+    progress = _job_stage_progress(conn, job_id)
+    conn.close()
+
+    for stage in db.STAGES:
+        if not progress[stage]:
+            return redirect(url_for("log_stage_form", job_id=job_id, stage=stage))
+    return redirect(url_for("job_summary", job_id=job_id))
+
+
+@app.route("/jobs/<int:job_id>/stage/<stage>")
+def log_stage_form(job_id, stage):
+    """Screen 2: the Log Stage form - Climate / Surface Prep / Paint / DFT section cards."""
+    if stage not in db.STAGES:
+        return redirect(url_for("start"))
+
     conn = db.get_db()
     job = conn.execute(
         """SELECT jobs.*, vessels.name AS vessel_name
@@ -68,61 +166,124 @@ def log_coat_form(job_id):
            WHERE jobs.id = ?""",
         (job_id,),
     ).fetchone()
-    conn.close()
-
     if job is None:
+        conn.close()
         return redirect(url_for("start"))
 
-    return render_template("log_coat.html", job=job)
+    entry = conn.execute(
+        "SELECT * FROM stage_entries WHERE job_id = ? AND stage = ?", (job_id, stage)
+    ).fetchone()
+    photos = []
+    if entry:
+        photos = conn.execute(
+            "SELECT * FROM stage_photos WHERE stage_entry_id = ? ORDER BY uploaded_at", (entry["id"],)
+        ).fetchall()
+    conn.close()
+
+    return render_template(
+        "log_stage.html",
+        job=job,
+        stage=stage,
+        stage_label=db.STAGE_LABELS[stage],
+        stages=db.STAGES,
+        stage_labels=db.STAGE_LABELS,
+        entry=entry,
+        photos=photos,
+        now=datetime.now().strftime("%Y-%m-%dT%H:%M"),
+    )
 
 
-@app.route("/log-coat/<int:job_id>", methods=["POST"])
-def submit_coat(job_id):
-    """Handle the coat form submission: save data + optional tin photo."""
+@app.route("/jobs/<int:job_id>/stage/<stage>", methods=["POST"])
+def submit_stage(job_id, stage):
+    if stage not in db.STAGES:
+        return redirect(url_for("start"))
+
     conn = db.get_db()
     job = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if job is None:
         conn.close()
         return redirect(url_for("start"))
 
-    def to_float(field):
-        value = request.form.get(field, "").strip()
-        return float(value) if value else None
+    def val(field):
+        return request.form.get(field, "").strip() or None
 
-    coat_number = request.form.get("coat_number", type=int)
-    humidity = to_float("humidity")
-    air_temp = to_float("air_temp")
-    surface_temp = to_float("surface_temp")
-    product_name = request.form.get("product_name", "").strip()
-    wft = to_float("wft")
-    dew_point = calculate_dew_point(air_temp, humidity)
-
-    tin_photo_filename = None
-    photo = request.files.get("tin_photo")
-    if photo and photo.filename and allowed_file(photo.filename):
-        app.config["UPLOAD_FOLDER"].mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        safe_name = secure_filename(photo.filename)
-        tin_photo_filename = f"job{job_id}_{timestamp}_{safe_name}"
-        photo.save(app.config["UPLOAD_FOLDER"] / tin_photo_filename)
+    def num(field):
+        raw = request.form.get(field, "").strip()
+        return float(raw) if raw else None
 
     conn.execute(
-        """INSERT INTO coating_entries
-           (job_id, humidity, air_temp, surface_temp, dew_point, product_name, wft,
-            tin_photo_filename, coat_number)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (job_id, humidity, air_temp, surface_temp, dew_point, product_name, wft,
-         tin_photo_filename, coat_number),
+        """UPDATE jobs SET client = ?, painter = ?, inspector = ?, reference_documents = ?,
+           updated_at = datetime('now', 'localtime') WHERE id = ?""",
+        (val("client"), val("painter"), val("inspector"), val("reference_documents"), job_id),
     )
+
+    air_temp = num("air_temp")
+    rh_percent = num("rh_percent")
+    dew_point = calculate_dew_point(air_temp, rh_percent)
+    dft_min, dft_max, dft_average, dft_std_dev = calc_dft_stats(val("dft_readings"))
+
+    fields = dict(
+        date_time=val("date_time"), conditions=val("conditions"), rh_percent=rh_percent,
+        air_temp=air_temp, dew_point=dew_point, surface_temp=num("surface_temp"),
+        paint_yes_no=val("paint_yes_no"),
+        prep_date_time=val("prep_date_time"), cleanliness=val("cleanliness"),
+        profile_sanding=val("profile_sanding"),
+        paint_date_time=val("paint_date_time"), product_name=val("product_name"),
+        batch_no_a=val("batch_no_a"), batch_no_b=val("batch_no_b"),
+        thinning_percent=num("thinning_percent"), thinning_product=val("thinning_product"),
+        volume_litres=num("volume_litres"), induction_time=val("induction_time"),
+        recoat_time_min=val("recoat_time_min"), recoat_time_max=val("recoat_time_max"),
+        wft=num("wft"),
+        dft_date_time=val("dft_date_time"), dft_readings=val("dft_readings"),
+        dft_min=dft_min, dft_max=dft_max, dft_average=dft_average, dft_std_dev=dft_std_dev,
+        appearance=val("appearance"), pass_fail_repair=val("pass_fail_repair"),
+    )
+
+    existing = conn.execute(
+        "SELECT id FROM stage_entries WHERE job_id = ? AND stage = ?", (job_id, stage)
+    ).fetchone()
+    if existing:
+        entry_id = existing["id"]
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        conn.execute(f"UPDATE stage_entries SET {set_clause} WHERE id = ?",
+                     (*fields.values(), entry_id))
+    else:
+        columns = ", ".join(fields.keys())
+        placeholders = ", ".join("?" for _ in fields)
+        cur = conn.execute(
+            f"INSERT INTO stage_entries (job_id, stage, {columns}) VALUES (?, ?, {placeholders})",
+            (job_id, stage, *fields.values()),
+        )
+        entry_id = cur.lastrowid
+
+    photos = request.files.getlist("photos")
+    if photos:
+        UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+    for photo in photos:
+        if photo and photo.filename and allowed_file(photo.filename):
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+            safe_name = secure_filename(photo.filename)
+            filename = f"job{job_id}_{stage}_{timestamp}_{safe_name}"
+            photo.save(UPLOAD_FOLDER / filename)
+            conn.execute(
+                "INSERT INTO stage_photos (stage_entry_id, filename) VALUES (?, ?)",
+                (entry_id, filename),
+            )
+
     conn.commit()
     conn.close()
 
-    return redirect(url_for("confirmation", job_id=job_id))
+    return redirect(url_for("job_router", job_id=job_id))
 
 
-@app.route("/confirmation/<int:job_id>")
-def confirmation(job_id):
-    """Screen 3: simple success message with next-action buttons."""
+@app.route("/uploads/<path:filename>")
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
+
+@app.route("/jobs/<int:job_id>/summary")
+def job_summary(job_id):
+    """Screen 3: compiled read-only grid + Generate PDF / Submit to Smartsheet."""
     conn = db.get_db()
     job = conn.execute(
         """SELECT jobs.*, vessels.name AS vessel_name
@@ -130,12 +291,93 @@ def confirmation(job_id):
            WHERE jobs.id = ?""",
         (job_id,),
     ).fetchone()
+    if job is None:
+        conn.close()
+        return redirect(url_for("start"))
+
+    entries_by_stage = {
+        row["stage"]: row
+        for row in conn.execute("SELECT * FROM stage_entries WHERE job_id = ?", (job_id,)).fetchall()
+    }
+    conn.close()
+
+    pdf_exists = (GENERATED_PDF_FOLDER / f"job_{job_id}.pdf").exists()
+
+    return render_template(
+        "job_summary.html",
+        job=job,
+        stages=db.STAGES,
+        stage_labels=db.STAGE_LABELS,
+        field_sections=pdf_generator.FIELD_SECTIONS,
+        entries_by_stage=entries_by_stage,
+        pdf_exists=pdf_exists,
+        submitted=request.args.get("submitted"),
+        error=request.args.get("error"),
+    )
+
+
+@app.route("/jobs/<int:job_id>/summary/pdf")
+def generate_job_pdf(job_id):
+    conn = db.get_db()
+    job = conn.execute(
+        """SELECT jobs.*, vessels.name AS vessel_name
+           FROM jobs JOIN vessels ON jobs.vessel_id = vessels.id
+           WHERE jobs.id = ?""",
+        (job_id,),
+    ).fetchone()
+    if job is None:
+        conn.close()
+        return redirect(url_for("start"))
+
+    entries_by_stage = {
+        row["stage"]: row
+        for row in conn.execute("SELECT * FROM stage_entries WHERE job_id = ?", (job_id,)).fetchall()
+    }
+    photos_by_stage = {}
+    for stage, entry in entries_by_stage.items():
+        photos_by_stage[stage] = conn.execute(
+            "SELECT * FROM stage_photos WHERE stage_entry_id = ? ORDER BY uploaded_at", (entry["id"],)
+        ).fetchall()
+    conn.close()
+
+    GENERATED_PDF_FOLDER.mkdir(parents=True, exist_ok=True)
+    download_name = f"{job['job_number']} - Coatings Diary - {job['area'] or job['job_title'] or ''}.pdf".strip()
+    output_path = GENERATED_PDF_FOLDER / f"job_{job_id}.pdf"
+
+    pdf_generator.build_coatings_diary_pdf(
+        output_path=str(output_path),
+        job=job,
+        entries_by_stage=entries_by_stage,
+        photos_by_stage=photos_by_stage,
+        upload_folder=UPLOAD_FOLDER,
+    )
+
+    return send_file(output_path, as_attachment=True, download_name=download_name)
+
+
+@app.route("/jobs/<int:job_id>/summary/submit-smartsheet", methods=["POST"])
+def submit_job_to_smartsheet(job_id):
+    conn = db.get_db()
+    job = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     conn.close()
 
     if job is None:
         return redirect(url_for("start"))
 
-    return render_template("confirmation.html", job=job)
+    pdf_path = GENERATED_PDF_FOLDER / f"job_{job_id}.pdf"
+    error = None
+    if not pdf_path.exists():
+        error = "Generate the PDF first, then submit it to Smartsheet."
+    elif not job["sheet_id"] or not job["sheet_row_id"]:
+        error = "This job isn't linked to a Smartsheet row yet - refresh the job list from the Start screen first."
+    else:
+        try:
+            smartsheet_client.attach_pdf_to_row(job["sheet_id"], job["sheet_row_id"], str(pdf_path))
+        except Exception as e:
+            error = str(e)
+
+    return redirect(url_for("job_summary", job_id=job_id,
+                             submitted=("0" if error else "1"), error=error))
 
 
 @app.route("/request-work")

@@ -4,44 +4,64 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Coatings Diary</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
 </head>
 <body>
-    <main class="screen">
-        <h1>Coatings Diary</h1>
+    {% include 'v3_nav.html' %}
 
-        <form method="get" action="{{ url_for('start') }}">
-            <label for="vessel_id">Vessel</label>
-            <select id="vessel_id" name="vessel_id" onchange="this.form.submit()">
-                <option value="">Select a vessel...</option>
-                {% for vessel in vessels %}
-                <option value="{{ vessel.id }}" {% if selected_vessel_id == vessel.id %}selected{% endif %}>
-                    {{ vessel.name }}
-                </option>
-                {% endfor %}
-            </select>
-        </form>
+    <main class="brand-body brand-body--narrow">
+        <h1 class="brand-title">Coatings Diary</h1>
+        <p class="brand-subtitle">Select a vessel, then a job, to log a stage or view its summary.</p>
 
-        {% if selected_vessel_id %}
-        <form id="job-form" onsubmit="this.action = '/log-coat/' + this.job_id.value; return this.job_id.value !== '';">
-            <label for="job_id">Job</label>
-            <select id="job_id" name="job_id" required>
-                <option value="">Select a job...</option>
-                {% for job in jobs %}
-                <option value="{{ job.id }}">{{ job.job_number }} - {{ job.area }}</option>
-                {% endfor %}
-            </select>
-
-            {% if not jobs %}
-            <p class="hint">No jobs found for this vessel yet.</p>
-            {% endif %}
-
-            <button type="submit" class="btn-primary">Log a coat</button>
-        </form>
+        {% if sync_error %}
+        <div class="brand-flash">Could not refresh jobs from Smartsheet ({{ sync_error }}) - showing the last-known job list.</div>
         {% endif %}
 
-        <p class="nav-links">
-            <a href="{{ url_for('request_work_form') }}">Request Work (PM)</a> &middot;
+        <div class="brand-panel">
+            <form method="get" action="{{ url_for('start') }}">
+                <div class="brand-field">
+                    <label class="brand-field__label" for="vessel_id">Vessel</label>
+                    <select id="vessel_id" name="vessel_id" class="brand-select" onchange="this.form.submit()">
+                        <option value="">Select a vessel...</option>
+                        {% for vessel in vessels %}
+                        <option value="{{ vessel.id }}" {% if selected_vessel_id == vessel.id %}selected{% endif %}>
+                            {{ vessel.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+
+        {% if selected_vessel_id %}
+        <div class="brand-action-row" style="margin-bottom:16px">
+            <a class="brand-btn brand-btn--white" href="{{ url_for('start', vessel_id=selected_vessel_id, refresh=1) }}">Refresh from Smartsheet</a>
+        </div>
+
+        {% if not jobs %}
+        <p class="brand-hint">No jobs found for this vessel yet.</p>
+        {% endif %}
+
+        <div class="brand-job-list">
+            {% for job in jobs %}
+            <a class="brand-job-card" href="{{ url_for('job_router', job_id=job.id) }}">
+                <div>
+                    <div class="brand-job-card__number">{{ job.job_number }}</div>
+                    <div class="brand-job-card__desc">{{ job.description or job.area or job.job_title or '' }}</div>
+                </div>
+                <div class="stage-dots">
+                    {% for stage in stages %}
+                    <span class="stage-dot {% if job.stage_progress[stage] %}stage-dot--done{% endif %}" title="{{ stage }}"></span>
+                    {% endfor %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <p class="brand-hint" style="margin-top:32px">
+            PM tools:
+            <a href="{{ url_for('request_work_form') }}">Request Work</a> &middot;
             <a href="{{ url_for('boat_builder_estimate_form') }}">Boat Builder Estimates</a> &middot;
             <a href="{{ url_for('equipment_log_form') }}">Equipment Log</a>
         </p>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log {{ stage_label }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+    {% include 'v3_nav.html' %}
+
+    <main class="brand-body brand-body--narrow">
+        <h1 class="brand-title">{{ job.vessel_name }} &middot; {{ job.job_number }}</h1>
+        <p class="brand-subtitle">{{ job.description or job.area or '' }} &mdash; Log {{ stage_label }}</p>
+
+        <div class="stage-dots" style="margin-bottom:20px">
+            {% for s in stages %}
+            <a href="{{ url_for('log_stage_form', job_id=job.id, stage=s) }}" title="{{ stage_labels[s] }}">
+                <span class="stage-dot {% if s == stage %}stage-dot--done{% endif %}"></span>
+            </a>
+            {% endfor %}
+        </div>
+
+        <form method="post" action="{{ url_for('submit_stage', job_id=job.id, stage=stage) }}" enctype="multipart/form-data">
+
+            <div class="brand-panel">
+                <h2 class="brand-panel__title">Job Details</h2>
+                <div class="brand-field-row">
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="client">Client</label>
+                        <input type="text" id="client" name="client" class="brand-input" value="{{ job.client or '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="painter">Painter</label>
+                        <input type="text" id="painter" name="painter" class="brand-input" value="{{ job.painter or '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="inspector">Inspector</label>
+                        <input type="text" id="inspector" name="inspector" class="brand-input" value="{{ job.inspector or '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="reference_documents">Reference Documents</label>
+                        <input type="text" id="reference_documents" name="reference_documents" class="brand-input" value="{{ job.reference_documents or '' }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="brand-panel">
+                <h2 class="brand-panel__title">Climate Data</h2>
+                <div class="brand-field-row">
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="date_time">Date/Time</label>
+                        <input type="datetime-local" id="date_time" name="date_time" class="brand-input"
+                               value="{{ entry.date_time if entry else now }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="conditions">Conditions</label>
+                        <input type="text" id="conditions" name="conditions" class="brand-input" placeholder="e.g. Overcast"
+                               value="{{ entry.conditions if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="rh_percent">RH %</label>
+                        <input type="number" id="rh_percent" name="rh_percent" class="brand-input" step="0.1" min="0" max="100"
+                               value="{{ entry.rh_percent if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="air_temp">Air Temp &deg;C</label>
+                        <input type="number" id="air_temp" name="air_temp" class="brand-input" step="0.1"
+                               value="{{ entry.air_temp if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="surface_temp">Surface Temp &deg;C</label>
+                        <input type="number" id="surface_temp" name="surface_temp" class="brand-input" step="0.1"
+                               value="{{ entry.surface_temp if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label">Dew Point &deg;C</label>
+                        <input type="text" class="brand-input" value="{{ entry.dew_point if entry and entry.dew_point else 'auto-calculated on submit' }}" disabled>
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="paint_yes_no">OK to Paint</label>
+                        <select id="paint_yes_no" name="paint_yes_no" class="brand-select">
+                            <option value="">-</option>
+                            <option value="Yes" {% if entry and entry.paint_yes_no == 'Yes' %}selected{% endif %}>Yes</option>
+                            <option value="No" {% if entry and entry.paint_yes_no == 'No' %}selected{% endif %}>No</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="brand-panel">
+                <h2 class="brand-panel__title">Surface Preparation <span class="brand-badge">Skippable</span></h2>
+                <div class="brand-field-row">
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="prep_date_time">Prep Date/Time</label>
+                        <input type="datetime-local" id="prep_date_time" name="prep_date_time" class="brand-input"
+                               value="{{ entry.prep_date_time if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="cleanliness">Cleanliness</label>
+                        <input type="text" id="cleanliness" name="cleanliness" class="brand-input"
+                               value="{{ entry.cleanliness if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="profile_sanding">Profile / Sanding</label>
+                        <input type="text" id="profile_sanding" name="profile_sanding" class="brand-input"
+                               value="{{ entry.profile_sanding if entry else '' }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="brand-panel">
+                <h2 class="brand-panel__title">Paint / Application</h2>
+                <div class="brand-field-row">
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="paint_date_time">Date/Time</label>
+                        <input type="datetime-local" id="paint_date_time" name="paint_date_time" class="brand-input"
+                               value="{{ entry.paint_date_time if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="product_name">Product Name</label>
+                        <input type="text" id="product_name" name="product_name" class="brand-input" placeholder="e.g. Intergard 269"
+                               value="{{ entry.product_name if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="batch_no_a">Batch No. A</label>
+                        <input type="text" id="batch_no_a" name="batch_no_a" class="brand-input"
+                               value="{{ entry.batch_no_a if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="batch_no_b">Batch No. B</label>
+                        <input type="text" id="batch_no_b" name="batch_no_b" class="brand-input"
+                               value="{{ entry.batch_no_b if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="thinning_percent">Thinning %</label>
+                        <input type="number" id="thinning_percent" name="thinning_percent" class="brand-input" step="0.1" min="0"
+                               value="{{ entry.thinning_percent if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="thinning_product">Thinning Product</label>
+                        <input type="text" id="thinning_product" name="thinning_product" class="brand-input"
+                               value="{{ entry.thinning_product if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="volume_litres">Volume (L)</label>
+                        <input type="number" id="volume_litres" name="volume_litres" class="brand-input" step="0.1" min="0"
+                               value="{{ entry.volume_litres if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="induction_time">Induction Time</label>
+                        <input type="text" id="induction_time" name="induction_time" class="brand-input" placeholder="e.g. 15 min"
+                               value="{{ entry.induction_time if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="recoat_time_min">Recoat Time Min</label>
+                        <input type="text" id="recoat_time_min" name="recoat_time_min" class="brand-input"
+                               value="{{ entry.recoat_time_min if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="recoat_time_max">Recoat Time Max</label>
+                        <input type="text" id="recoat_time_max" name="recoat_time_max" class="brand-input"
+                               value="{{ entry.recoat_time_max if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="wft">WFT</label>
+                        <input type="number" id="wft" name="wft" class="brand-input" step="1" min="0"
+                               value="{{ entry.wft if entry else '' }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="brand-panel">
+                <h2 class="brand-panel__title">DFT &amp; Inspection</h2>
+                <div class="brand-field-row">
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="dft_date_time">Date/Time</label>
+                        <input type="datetime-local" id="dft_date_time" name="dft_date_time" class="brand-input"
+                               value="{{ entry.dft_date_time if entry else '' }}">
+                    </div>
+                    <div class="brand-field" style="flex-basis:100%">
+                        <label class="brand-field__label" for="dft_readings">DFT Spot Readings (comma-separated)</label>
+                        <input type="text" id="dft_readings" name="dft_readings" class="brand-input" placeholder="e.g. 120, 135, 128, 140"
+                               value="{{ entry.dft_readings if entry else '' }}">
+                        <p class="brand-hint">Min/max/average/std dev are calculated automatically on submit.</p>
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="appearance">Appearance</label>
+                        <input type="text" id="appearance" name="appearance" class="brand-input"
+                               value="{{ entry.appearance if entry else '' }}">
+                    </div>
+                    <div class="brand-field">
+                        <label class="brand-field__label" for="pass_fail_repair">Pass / Fail / Repair</label>
+                        <select id="pass_fail_repair" name="pass_fail_repair" class="brand-select">
+                            <option value="">-</option>
+                            <option value="Pass" {% if entry and entry.pass_fail_repair == 'Pass' %}selected{% endif %}>Pass</option>
+                            <option value="Fail" {% if entry and entry.pass_fail_repair == 'Fail' %}selected{% endif %}>Fail</option>
+                            <option value="Repair" {% if entry and entry.pass_fail_repair == 'Repair' %}selected{% endif %}>Repair</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="brand-panel">
+                <h2 class="brand-panel__title">Photos</h2>
+                {% if photos %}
+                <div class="photo-grid">
+                    {% for photo in photos %}
+                    <div class="photo-chip"><img src="{{ url_for('uploaded_file', filename=photo.filename) }}" alt=""></div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <div class="brand-field" style="margin-top:14px">
+                    <label class="brand-field__label" for="photos">Add photos</label>
+                    <input type="file" id="photos" name="photos" accept="image/*" multiple capture="environment" class="brand-input">
+                </div>
+            </div>
+
+            <div class="brand-action-row">
+                <button type="submit" class="brand-btn brand-btn--red">Save {{ stage_label }}</button>
+                <a class="brand-btn brand-btn--white" href="{{ url_for('job_summary', job_id=job.id) }}">Job Summary</a>
+            </div>
+        </form>
+    </main>
+</body>
+</html>

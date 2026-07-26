@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Summary</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+    {% include 'v3_nav.html' %}
+
+    <main class="brand-body">
+        <h1 class="brand-title">{{ job.vessel_name }} &middot; {{ job.job_number }}</h1>
+        <p class="brand-subtitle">{{ job.description or job.area or '' }} &mdash; Job Summary</p>
+
+        {% if submitted == '1' %}
+        <div class="brand-flash" style="background:#eefaf0;border-color:#bfe6c8;color:#1a6e2e">Submitted to Smartsheet successfully.</div>
+        {% elif submitted == '0' and error %}
+        <div class="brand-flash">Could not submit to Smartsheet: {{ error }}</div>
+        {% endif %}
+
+        <div class="brand-panel">
+            <h2 class="brand-panel__title">Stages</h2>
+            <div class="summary-table-wrap">
+                <table class="summary-table">
+                    <thead>
+                        <tr>
+                            <th>Section</th>
+                            {% for stage in stages %}
+                            <th>{{ stage_labels[stage] }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for section_title, fields in field_sections %}
+                        <tr>
+                            <td>{{ section_title }}</td>
+                            {% for stage in stages %}
+                            {% set entry = entries_by_stage.get(stage) %}
+                            {% if entry %}
+                                {% set any_value = namespace(found=false) %}
+                                {% for label, column in fields %}
+                                    {% if entry[column] not in (None, '') %}{% set any_value.found = true %}{% endif %}
+                                {% endfor %}
+                                <td class="summary-table__check">{{ '✓' if any_value.found else '–' }}</td>
+                            {% else %}
+                                <td class="summary-table__blank">–</td>
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="brand-panel">
+            <h2 class="brand-panel__title">Actions</h2>
+            <div class="brand-action-row">
+                <a class="brand-btn brand-btn--navy" href="{{ url_for('generate_job_pdf', job_id=job.id) }}">Generate PDF</a>
+                <form method="post" action="{{ url_for('submit_job_to_smartsheet', job_id=job.id) }}">
+                    <button type="submit" class="brand-btn brand-btn--red" {% if not pdf_exists %}disabled{% endif %}>Submit to Smartsheet</button>
+                </form>
+            </div>
+            {% if not pdf_exists %}
+            <p class="brand-hint">Generate the PDF first - Submit to Smartsheet unlocks once it's been created.</p>
+            {% endif %}
+        </div>
+
+        <p class="brand-hint">
+            <a href="{{ url_for('job_router', job_id=job.id) }}">Log another stage</a> &middot;
+            <a href="{{ url_for('start') }}">Back to Start</a>
+        </p>
+    </main>
+</body>
+</html>
