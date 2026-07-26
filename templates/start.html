@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coatings Diary</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen">
+        <h1>Coatings Diary</h1>
+
+        <form method="get" action="{{ url_for('start') }}">
+            <label for="vessel_id">Vessel</label>
+            <select id="vessel_id" name="vessel_id" onchange="this.form.submit()">
+                <option value="">Select a vessel...</option>
+                {% for vessel in vessels %}
+                <option value="{{ vessel.id }}" {% if selected_vessel_id == vessel.id %}selected{% endif %}>
+                    {{ vessel.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+
+        {% if selected_vessel_id %}
+        <form id="job-form" onsubmit="this.action = '/log-coat/' + this.job_id.value; return this.job_id.value !== '';">
+            <label for="job_id">Job</label>
+            <select id="job_id" name="job_id" required>
+                <option value="">Select a job...</option>
+                {% for job in jobs %}
+                <option value="{{ job.id }}">{{ job.job_number }} - {{ job.area }}</option>
+                {% endfor %}
+            </select>
+
+            {% if not jobs %}
+            <p class="hint">No jobs found for this vessel yet.</p>
+            {% endif %}
+
+            <button type="submit" class="btn-primary">Log a coat</button>
+        </form>
+        {% endif %}
+    </main>
+</body>
+</html>
