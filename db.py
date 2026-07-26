@@ -60,9 +60,37 @@ CREATE TABLE IF NOT EXISTS work_requests (
     FOREIGN KEY (vessel_id) REFERENCES vessels(id),
     FOREIGN KEY (job_id) REFERENCES jobs(id)
 );
+
+CREATE TABLE IF NOT EXISTS boat_builder_estimates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+    vessel_id INTEGER NOT NULL,
+    description TEXT,
+    materials_cost REAL,
+    total_cost REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Submitted',
+    submitted_by TEXT NOT NULL,
+    submitted_date TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    reviewed_by TEXT,
+    review_notes TEXT,
+    review_date TEXT,
+    FOREIGN KEY (job_id) REFERENCES jobs(id),
+    FOREIGN KEY (vessel_id) REFERENCES vessels(id)
+);
+
+CREATE TABLE IF NOT EXISTS boat_builder_labor_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    estimate_id INTEGER NOT NULL,
+    trade_role TEXT NOT NULL,
+    num_workers INTEGER NOT NULL,
+    num_days INTEGER NOT NULL,
+    worker_days INTEGER NOT NULL,
+    FOREIGN KEY (estimate_id) REFERENCES boat_builder_estimates(id)
+);
 """
 
 REQUEST_REASONS = ["New Work", "Design Change", "Damage Found", "Clarification", "Other"]
+TRADE_ROLES = ["Boat Builder", "Apprentice", "Fabricator", "Finisher", "Other"]
 
 SEED_VESSELS = ["Pangaea", "Fidelis", "Aegle", "Bundalong"]
 

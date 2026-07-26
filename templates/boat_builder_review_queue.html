@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boat Builder Estimates - Review</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen">
+        <h1>Boat Builder Estimates</h1>
+        <p class="subheading">{{ estimates|length }} awaiting review</p>
+
+        {% if not estimates %}
+        <p class="hint">Nothing awaiting review right now.</p>
+        {% endif %}
+
+        <div class="request-list">
+            {% for est in estimates %}
+            <a href="{{ url_for('boat_builder_review_detail', estimate_id=est.id) }}" class="request-card">
+                <div class="request-card__top">
+                    <span class="badge badge-submitted">Submitted</span>
+                    <span class="request-card__vessel">{{ est.vessel_name }}</span>
+                </div>
+                <div class="request-card__title">{{ est.job_number }}</div>
+                <div class="request-card__desc">{{ est.description }}</div>
+                <div class="request-card__meta">{{ est.submitted_by }} &middot; {{ est.submitted_date }} &middot; ${{ "%.2f"|format(est.total_cost) }}</div>
+            </a>
+            {% endfor %}
+        </div>
+
+        <p class="nav-links">
+            <a href="{{ url_for('boat_builder_estimate_form') }}">Submit Estimate</a> &middot;
+            <a href="{{ url_for('boat_builder_history') }}">Estimate History</a>
+        </p>
+    </main>
+</body>
+</html>

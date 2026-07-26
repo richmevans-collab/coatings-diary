@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estimate Submitted</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen screen-centered">
+        <p class="checkmark">&#10003;</p>
+        <h1>Estimate submitted</h1>
+        <p class="subheading">PM will review.</p>
+        <p class="subheading">{{ estimate.vessel_name }} &middot; {{ estimate.job_number }}</p>
+
+        <a href="{{ url_for('boat_builder_estimate_form') }}" class="btn-primary">Submit another estimate</a>
+        <a href="{{ url_for('boat_builder_review_queue') }}" class="btn-secondary">View Review Queue</a>
+    </main>
+</body>
+</html>

@@ -349,6 +349,207 @@ def request_history():
     )
 
 
+@app.route("/boat-builder/estimate")
+def boat_builder_estimate_form():
+    """Boat builder-facing: submit a labor/materials estimate against an existing job."""
+    conn = db.get_db()
+    vessels = conn.execute("SELECT * FROM vessels ORDER BY name").fetchall()
+
+    selected_vessel_id = request.args.get("vessel_id", type=int)
+    jobs = []
+    if selected_vessel_id:
+        jobs = conn.execute(
+            "SELECT * FROM jobs WHERE vessel_id = ? ORDER BY job_number",
+            (selected_vessel_id,),
+        ).fetchall()
+    conn.close()
+
+    return render_template(
+        "boat_builder_form.html",
+        vessels=vessels,
+        jobs=jobs,
+        selected_vessel_id=selected_vessel_id,
+        trade_roles=db.TRADE_ROLES,
+    )
+
+
+@app.route("/boat-builder/estimate", methods=["POST"])
+def submit_boat_builder_estimate():
+    vessel_id = request.form.get("vessel_id", type=int)
+    job_id = request.form.get("job_id", type=int)
+    description = request.form.get("description", "").strip()
+    submitted_by = request.form.get("submitted_by", "").strip()
+    materials_raw = request.form.get("materials_cost", "").strip()
+    materials_cost = float(materials_raw) if materials_raw else None
+    total_cost = float(request.form.get("total_cost", "0") or 0)
+
+    trade_roles = request.form.getlist("trade_role[]")
+    num_workers_list = request.form.getlist("num_workers[]")
+    num_days_list = request.form.getlist("num_days[]")
+
+    conn = db.get_db()
+    cur = conn.execute(
+        """INSERT INTO boat_builder_estimates
+           (job_id, vessel_id, description, materials_cost, total_cost, submitted_by)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (job_id, vessel_id, description, materials_cost, total_cost, submitted_by),
+    )
+    estimate_id = cur.lastrowid
+
+    for trade_role, workers_raw, days_raw in zip(trade_roles, num_workers_list, num_days_list):
+        trade_role = trade_role.strip()
+        if not trade_role or not workers_raw or not days_raw:
+            continue
+        num_workers = int(workers_raw)
+        num_days = int(days_raw)
+        conn.execute(
+            """INSERT INTO boat_builder_labor_lines
+               (estimate_id, trade_role, num_workers, num_days, worker_days)
+               VALUES (?, ?, ?, ?, ?)""",
+            (estimate_id, trade_role, num_workers, num_days, num_workers * num_days),
+        )
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("boat_builder_confirmation", estimate_id=estimate_id))
+
+
+@app.route("/boat-builder/estimate/confirmation/<int:estimate_id>")
+def boat_builder_confirmation(estimate_id):
+    conn = db.get_db()
+    estimate = conn.execute(
+        """SELECT boat_builder_estimates.*, vessels.name AS vessel_name, jobs.job_number
+           FROM boat_builder_estimates
+           JOIN vessels ON boat_builder_estimates.vessel_id = vessels.id
+           JOIN jobs ON boat_builder_estimates.job_id = jobs.id
+           WHERE boat_builder_estimates.id = ?""",
+        (estimate_id,),
+    ).fetchone()
+    conn.close()
+
+    if estimate is None:
+        return redirect(url_for("boat_builder_estimate_form"))
+
+    return render_template("boat_builder_confirmation.html", estimate=estimate)
+
+
+def _fetch_boat_builder_estimate(conn, estimate_id):
+    estimate = conn.execute(
+        """SELECT boat_builder_estimates.*, vessels.name AS vessel_name, jobs.job_number,
+                  jobs.job_title AS job_title
+           FROM boat_builder_estimates
+           JOIN vessels ON boat_builder_estimates.vessel_id = vessels.id
+           JOIN jobs ON boat_builder_estimates.job_id = jobs.id
+           WHERE boat_builder_estimates.id = ?""",
+        (estimate_id,),
+    ).fetchone()
+    labor_lines = conn.execute(
+        "SELECT * FROM boat_builder_labor_lines WHERE estimate_id = ?", (estimate_id,)
+    ).fetchall()
+    return estimate, labor_lines
+
+
+@app.route("/boat-builder/review")
+def boat_builder_review_queue():
+    conn = db.get_db()
+    submitted = conn.execute(
+        """SELECT boat_builder_estimates.*, vessels.name AS vessel_name, jobs.job_number
+           FROM boat_builder_estimates
+           JOIN vessels ON boat_builder_estimates.vessel_id = vessels.id
+           JOIN jobs ON boat_builder_estimates.job_id = jobs.id
+           WHERE boat_builder_estimates.status = 'Submitted'
+           ORDER BY boat_builder_estimates.submitted_date ASC"""
+    ).fetchall()
+    conn.close()
+    return render_template("boat_builder_review_queue.html", estimates=submitted)
+
+
+@app.route("/boat-builder/review/<int:estimate_id>")
+def boat_builder_review_detail(estimate_id):
+    conn = db.get_db()
+    estimate, labor_lines = _fetch_boat_builder_estimate(conn, estimate_id)
+    conn.close()
+
+    if estimate is None:
+        return redirect(url_for("boat_builder_review_queue"))
+
+    total_worker_days = sum(line["worker_days"] for line in labor_lines)
+
+    return render_template(
+        "boat_builder_review_detail.html",
+        estimate=estimate,
+        labor_lines=labor_lines,
+        total_worker_days=total_worker_days,
+    )
+
+
+@app.route("/boat-builder/review/<int:estimate_id>/decision", methods=["POST"])
+def boat_builder_review_decision(estimate_id):
+    decision = request.form.get("decision")  # Approved / Revision Requested / Rejected
+    reviewed_by = request.form.get("reviewed_by", "").strip() or None
+    review_notes = request.form.get("review_notes", "").strip() or None
+
+    conn = db.get_db()
+    conn.execute(
+        """UPDATE boat_builder_estimates
+           SET status = ?, reviewed_by = ?, review_notes = ?, review_date = datetime('now', 'localtime')
+           WHERE id = ?""",
+        (decision, reviewed_by, review_notes, estimate_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("boat_builder_review_detail", estimate_id=estimate_id))
+
+
+@app.route("/boat-builder/history")
+def boat_builder_history():
+    vessel_id = request.args.get("vessel_id", type=int)
+    status = request.args.get("status") or None
+    start_date = request.args.get("start_date") or None
+    end_date = request.args.get("end_date") or None
+
+    query = """SELECT boat_builder_estimates.*, vessels.name AS vessel_name, jobs.job_number,
+                      (SELECT COALESCE(SUM(worker_days), 0) FROM boat_builder_labor_lines
+                       WHERE boat_builder_labor_lines.estimate_id = boat_builder_estimates.id) AS total_worker_days
+               FROM boat_builder_estimates
+               JOIN vessels ON boat_builder_estimates.vessel_id = vessels.id
+               JOIN jobs ON boat_builder_estimates.job_id = jobs.id
+               WHERE 1=1"""
+    params = []
+    if vessel_id:
+        query += " AND boat_builder_estimates.vessel_id = ?"
+        params.append(vessel_id)
+    if status:
+        query += " AND boat_builder_estimates.status = ?"
+        params.append(status)
+    if start_date:
+        query += " AND date(boat_builder_estimates.submitted_date) >= date(?)"
+        params.append(start_date)
+    if end_date:
+        query += " AND date(boat_builder_estimates.submitted_date) <= date(?)"
+        params.append(end_date)
+    query += " ORDER BY boat_builder_estimates.submitted_date DESC"
+
+    conn = db.get_db()
+    vessels = conn.execute("SELECT * FROM vessels ORDER BY name").fetchall()
+    results = conn.execute(query, params).fetchall()
+    conn.close()
+
+    total_worker_days = sum(row["total_worker_days"] for row in results)
+
+    return render_template(
+        "boat_builder_history.html",
+        estimates=results,
+        vessels=vessels,
+        selected_vessel_id=vessel_id,
+        selected_status=status,
+        start_date=start_date,
+        end_date=end_date,
+        total_worker_days=total_worker_days,
+    )
+
+
 if __name__ == "__main__":
     db.setup()
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -263,3 +263,113 @@ textarea:focus {
 .decision-row .btn-secondary {
     margin-top: 0;
 }
+
+.decision-row--triple {
+    flex-direction: column;
+}
+
+.decision-row--triple button {
+    width: 100%;
+}
+
+.badge-submitted {
+    background: #fff3cd;
+    color: #8a6414;
+}
+
+.badge-revision-requested {
+    background: #ffe4c4;
+    color: #8a4b14;
+}
+
+.hint-neutral {
+    color: #777;
+}
+
+.labor-line {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.labor-line select {
+    flex: 2;
+    margin: 0;
+}
+
+.labor-line input {
+    flex: 1;
+    margin: 0;
+    min-width: 0;
+}
+
+.btn-remove-line {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 20px;
+    color: #a33;
+    cursor: pointer;
+}
+
+.btn-add-line {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    margin-top: 4px;
+    border: 2px dashed #999;
+    border-radius: 8px;
+    background: #fff;
+    font-weight: 600;
+    color: #444;
+    cursor: pointer;
+}
+
+.labor-table {
+    background: #fff;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.labor-table__header,
+.labor-table__row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    padding: 10px 14px;
+    font-size: 15px;
+}
+
+.labor-table__header {
+    background: #f0f0f0;
+    font-weight: 700;
+}
+
+.labor-table__row:not(:last-child) {
+    border-bottom: 1px solid #eee;
+}
+
+.labor-table__total {
+    font-weight: 700;
+    background: #f9f9f9;
+}
+
+.filter-row--dates {
+    display: flex;
+    gap: 10px;
+    margin: 0;
+}
+
+.filter-row--dates input {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 16px;
+}

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boat Builder Estimate History</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen">
+        <h1>Boat Builder Estimate History</h1>
+
+        <form method="get" action="{{ url_for('boat_builder_history') }}" class="filter-row">
+            <select name="vessel_id" onchange="this.form.submit()">
+                <option value="">All Vessels</option>
+                {% for vessel in vessels %}
+                <option value="{{ vessel.id }}" {% if selected_vessel_id == vessel.id %}selected{% endif %}>{{ vessel.name }}</option>
+                {% endfor %}
+            </select>
+
+            <select name="status" onchange="this.form.submit()">
+                <option value="">All Statuses</option>
+                <option value="Submitted" {% if selected_status == 'Submitted' %}selected{% endif %}>Submitted</option>
+                <option value="Approved" {% if selected_status == 'Approved' %}selected{% endif %}>Approved</option>
+                <option value="Revision Requested" {% if selected_status == 'Revision Requested' %}selected{% endif %}>Revision Requested</option>
+                <option value="Rejected" {% if selected_status == 'Rejected' %}selected{% endif %}>Rejected</option>
+            </select>
+
+            <div class="filter-row filter-row--dates">
+                <input type="date" name="start_date" value="{{ start_date or '' }}" onchange="this.form.submit()">
+                <input type="date" name="end_date" value="{{ end_date or '' }}" onchange="this.form.submit()">
+            </div>
+        </form>
+
+        <p class="subheading">{{ estimates|length }} estimate(s) &middot; {{ total_worker_days }} total worker-days</p>
+
+        {% if not estimates %}
+        <p class="hint">No estimates match these filters.</p>
+        {% endif %}
+
+        <div class="request-list">
+            {% for est in estimates %}
+            <a href="{{ url_for('boat_builder_review_detail', estimate_id=est.id) }}" class="request-card">
+                <div class="request-card__top">
+                    <span class="badge badge-{{ est.status|lower|replace(' ', '-') }}">{{ est.status }}</span>
+                    <span class="request-card__vessel">{{ est.vessel_name }}</span>
+                </div>
+                <div class="request-card__title">{{ est.job_number }}</div>
+                <div class="request-card__meta">{{ est.total_worker_days }} worker-days &middot; ${{ "%.2f"|format(est.total_cost) }} &middot; {{ est.submitted_date }}</div>
+            </a>
+            {% endfor %}
+        </div>
+
+        <p class="nav-links">
+            <a href="{{ url_for('boat_builder_estimate_form') }}">Submit Estimate</a> &middot;
+            <a href="{{ url_for('boat_builder_review_queue') }}">Review Queue</a>
+        </p>
+    </main>
+</body>
+</html>

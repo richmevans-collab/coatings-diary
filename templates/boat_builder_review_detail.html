@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boat Builder Estimate Detail</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen">
+        <h1>Boat Builder Estimate</h1>
+        <p class="subheading">{{ estimate.vessel_name }} &middot; {{ estimate.job_number }}{% if estimate.job_title %} - {{ estimate.job_title }}{% endif %}</p>
+
+        <span class="badge badge-{{ estimate.status|lower|replace(' ', '-') }}">{{ estimate.status }}</span>
+
+        <label>Description</label>
+        <p class="detail-text">{{ estimate.description }}</p>
+
+        <label>Labor Breakdown</label>
+        <div class="labor-table">
+            <div class="labor-table__header">
+                <span>Trade/Role</span><span>Workers</span><span>Days</span><span>Worker-Days</span>
+            </div>
+            {% for line in labor_lines %}
+            <div class="labor-table__row">
+                <span>{{ line.trade_role }}</span><span>{{ line.num_workers }}</span><span>{{ line.num_days }}</span><span>{{ line.worker_days }}</span>
+            </div>
+            {% endfor %}
+            <div class="labor-table__row labor-table__total">
+                <span>Total</span><span></span><span></span><span>{{ total_worker_days }}</span>
+            </div>
+        </div>
+
+        {% if estimate.materials_cost %}
+        <label>Materials Cost</label>
+        <p class="detail-text">${{ "%.2f"|format(estimate.materials_cost) }}</p>
+        {% endif %}
+
+        <label>Total Estimated Cost</label>
+        <p class="detail-text">${{ "%.2f"|format(estimate.total_cost) }}</p>
+
+        <label>Submitted By</label>
+        <p class="detail-text">{{ estimate.submitted_by }} &middot; {{ estimate.submitted_date }}</p>
+
+        {% if estimate.status == 'Submitted' %}
+        <form method="post" action="{{ url_for('boat_builder_review_decision', estimate_id=estimate.id) }}">
+            <label for="reviewed_by">Reviewed By</label>
+            <input type="text" id="reviewed_by" name="reviewed_by" placeholder="Your name">
+
+            <label for="review_notes">Review Notes</label>
+            <textarea id="review_notes" name="review_notes" rows="3" placeholder="Approval notes, revision requested, or rejection reason"></textarea>
+
+            <div class="decision-row decision-row--triple">
+                <button type="submit" name="decision" value="Rejected" class="btn-secondary">Reject</button>
+                <button type="submit" name="decision" value="Revision Requested" class="btn-secondary">Request Revision</button>
+                <button type="submit" name="decision" value="Approved" class="btn-primary">Approve</button>
+            </div>
+        </form>
+        {% else %}
+        {% if estimate.review_notes %}
+        <label>Review Notes</label>
+        <p class="detail-text">{{ estimate.review_notes }}</p>
+        {% endif %}
+        <label>Reviewed By</label>
+        <p class="detail-text">{{ estimate.reviewed_by or 'Unknown' }} &middot; {{ estimate.review_date }}</p>
+        {% endif %}
+
+        <p class="nav-links">
+            <a href="{{ url_for('boat_builder_review_queue') }}">Review Queue</a> &middot;
+            <a href="{{ url_for('boat_builder_history') }}">Estimate History</a>
+        </p>
+    </main>
+</body>
+</html>
