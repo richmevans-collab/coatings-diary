@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usage Logged</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen screen-centered">
+        <p class="checkmark">&#10003;</p>
+        <h1>Logged</h1>
+        <p class="subheading">
+            {{ entry.equipment_name }} for {{ entry.vessel_name }}
+            from {{ entry.start_date }}{% if entry.end_date %} to {{ entry.end_date }}{% endif %}
+        </p>
+
+        <a href="{{ url_for('equipment_log_form') }}" class="btn-primary">Log another</a>
+        <a href="{{ url_for('equipment_history') }}" class="btn-secondary">View History</a>
+    </main>
+</body>
+</html>

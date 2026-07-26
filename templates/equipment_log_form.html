@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ 'Edit Logged Usage' if entry else 'Log Equipment / Consumable' }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen">
+        <h1>{{ 'Edit Logged Usage' if entry else 'Log Equipment / Consumable' }}</h1>
+
+        <form method="post" action="{{ url_for('update_equipment_log', log_id=entry.id) if entry else url_for('submit_equipment_log') }}">
+            <label for="vessel_id">Vessel</label>
+            <select id="vessel_id" name="vessel_id" required>
+                <option value="">Select a vessel...</option>
+                {% for vessel in vessels %}
+                <option value="{{ vessel.id }}" {% if entry and entry.vessel_id == vessel.id %}selected{% endif %}>
+                    {{ vessel.name }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <label for="equipment_name">Equipment / Consumable</label>
+            <select id="equipment_name" name="equipment_name" required onchange="applyCatalogDefaults()">
+                <option value="">Select...</option>
+                {% for category, items in equipment_by_category.items() %}
+                <optgroup label="{{ category }}">
+                    {% for item in items %}
+                    <option value="{{ item.equipment_name }}" data-unit="{{ item.unit }}" data-rate="{{ item.standard_rate }}"
+                        {% if entry and entry.equipment_name == item.equipment_name %}selected{% endif %}>
+                        {{ item.equipment_name }}
+                    </option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
+
+            <label for="start_date">Start Date</label>
+            <input type="date" id="start_date" name="start_date" value="{{ entry.start_date if entry else today }}" required>
+
+            <label for="end_date">End Date (optional)</label>
+            <input type="date" id="end_date" name="end_date" value="{{ entry.end_date if entry else '' }}">
+
+            <label for="quantity">Quantity</label>
+            <input type="number" id="quantity" name="quantity" step="0.01" min="0.01" value="{{ entry.quantity if entry else 1 }}" required>
+
+            <label for="unit">Unit</label>
+            <input type="text" id="unit" name="unit" value="{{ entry.unit if entry else '' }}">
+
+            <label for="cost_per_unit">Cost Per Unit ($)</label>
+            <input type="number" id="cost_per_unit" name="cost_per_unit" step="0.01" min="0" value="{{ entry.cost_per_unit if entry else '' }}" required>
+
+            <label for="notes">Notes (optional)</label>
+            <textarea id="notes" name="notes" rows="3" placeholder="e.g. for scaffolding area near mast, returned early">{{ entry.notes if entry else '' }}</textarea>
+
+            <label for="logged_by">Logged By</label>
+            <input type="text" id="logged_by" name="logged_by" placeholder="Your name" value="{{ entry.logged_by if entry else '' }}">
+
+            <button type="submit" class="btn-primary btn-sticky">{{ 'Save Changes' if entry else 'Log Usage' }}</button>
+        </form>
+
+        <p class="nav-links">
+            <a href="{{ url_for('equipment_history') }}">Consumables History</a> &middot;
+            <a href="{{ url_for('equipment_weekly_report') }}">Weekly Report</a>
+        </p>
+    </main>
+
+    <script>
+        function applyCatalogDefaults() {
+            var select = document.getElementById('equipment_name');
+            var selected = select.options[select.selectedIndex];
+            if (!selected.dataset.unit) return;
+            document.getElementById('unit').value = selected.dataset.unit;
+            document.getElementById('cost_per_unit').value = selected.dataset.rate;
+        }
+    </script>
+</body>
+</html>

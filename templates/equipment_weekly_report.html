@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Equipment Report</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen screen-wide">
+        <div class="no-print">
+            <h1>Weekly Report</h1>
+
+            <form method="get" action="{{ url_for('equipment_weekly_report') }}" class="filter-row">
+                <select name="vessel_id" onchange="this.form.submit()">
+                    <option value="">All Vessels</option>
+                    {% for vessel in vessels %}
+                    <option value="{{ vessel.id }}" {% if selected_vessel_id == vessel.id %}selected{% endif %}>{{ vessel.name }}</option>
+                    {% endfor %}
+                </select>
+                <input type="date" name="week_start" value="{{ week_start }}" onchange="this.form.submit()">
+            </form>
+
+            <button type="button" class="btn-secondary" onclick="window.print()">Print</button>
+        </div>
+
+        <p class="report-week">Week of {{ week_start }} to {{ week_end }}</p>
+
+        {% for vessel_name, group in vessel_groups.items() %}
+        <section class="report-vessel">
+            <h2 class="report-vessel__title">{{ vessel_name }}</h2>
+            <div class="table-wrap">
+                <table class="data-table data-table--print">
+                    <thead>
+                        <tr>
+                            <th>Equipment</th>
+                            <th>Dates Used</th>
+                            <th>Quantity</th>
+                            <th>Rate</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in group.entries %}
+                        <tr>
+                            <td>{{ entry.equipment_name }}</td>
+                            <td>{{ entry.start_date }}{% if entry.end_date %} &ndash; {{ entry.end_date }}{% endif %}</td>
+                            <td>{{ entry.quantity }} {{ entry.unit }}</td>
+                            <td>${{ "%.2f"|format(entry.cost_per_unit) }}</td>
+                            <td>${{ "%.2f"|format(entry.total_cost) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="report-vessel__total">Grand Total: ${{ "%.2f"|format(group.total) }}</p>
+        </section>
+        {% else %}
+        <p class="hint">No usage logged for this week.</p>
+        {% endfor %}
+
+        <p class="nav-links no-print">
+            <a href="{{ url_for('equipment_log_form') }}">Log Equipment/Consumable</a> &middot;
+            <a href="{{ url_for('equipment_history') }}">Consumables History</a>
+        </p>
+    </main>
+</body>
+</html>

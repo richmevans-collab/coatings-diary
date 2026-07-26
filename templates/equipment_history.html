@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consumables History</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="screen screen-wide">
+        <h1>Consumables History</h1>
+
+        <form method="get" action="{{ url_for('equipment_history') }}" class="filter-row">
+            <select name="vessel_id" onchange="this.form.submit()">
+                <option value="">All Vessels</option>
+                {% for vessel in vessels %}
+                <option value="{{ vessel.id }}" {% if selected_vessel_id == vessel.id %}selected{% endif %}>{{ vessel.name }}</option>
+                {% endfor %}
+            </select>
+
+            <div class="filter-row filter-row--dates">
+                <input type="date" name="start_date" value="{{ start_date or '' }}" onchange="this.form.submit()">
+                <input type="date" name="end_date" value="{{ end_date or '' }}" onchange="this.form.submit()">
+            </div>
+
+            <input type="text" name="equipment" placeholder="Search equipment..." value="{{ equipment_search }}">
+            <button type="submit" class="btn-secondary btn-filter">Filter</button>
+        </form>
+
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Equipment</th>
+                        <th>Qty</th>
+                        <th>Rate</th>
+                        <th>Total</th>
+                        <th>Notes</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr>
+                        <td>{{ entry.start_date }}{% if entry.end_date %} &ndash; {{ entry.end_date }}{% endif %}</td>
+                        <td>{{ entry.vessel_name }} &middot; {{ entry.equipment_name }}</td>
+                        <td>{{ entry.quantity }} {{ entry.unit }}</td>
+                        <td>${{ "%.2f"|format(entry.cost_per_unit) }}</td>
+                        <td>${{ "%.2f"|format(entry.total_cost) }}</td>
+                        <td>{{ entry.notes or '' }}</td>
+                        <td class="data-table__actions">
+                            <a href="{{ url_for('edit_equipment_log_form', log_id=entry.id) }}">Edit</a>
+                            <form method="post" action="{{ url_for('delete_equipment_log', log_id=entry.id) }}" onsubmit="return confirm('Delete this log entry?')">
+                                <button type="submit" class="link-button">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="hint">No usage logged for these filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="summary-box">
+            <h2 class="summary-box__title">Summary</h2>
+            {% for equipment_name, total in summary %}
+            <div class="summary-box__row">
+                <span>{{ equipment_name }}</span><span>${{ "%.2f"|format(total) }}</span>
+            </div>
+            {% endfor %}
+            <div class="summary-box__row summary-box__row--total">
+                <span>Total ({{ entries|length }} entries)</span><span>${{ "%.2f"|format(grand_total) }}</span>
+            </div>
+        </div>
+
+        <p class="nav-links">
+            <a href="{{ url_for('equipment_log_form') }}">Log Equipment/Consumable</a> &middot;
+            <a href="{{ url_for('equipment_weekly_report') }}">Weekly Report</a>
+        </p>
+    </main>
+</body>
+</html>

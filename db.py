@@ -87,6 +87,34 @@ CREATE TABLE IF NOT EXISTS boat_builder_labor_lines (
     worker_days INTEGER NOT NULL,
     FOREIGN KEY (estimate_id) REFERENCES boat_builder_estimates(id)
 );
+
+CREATE TABLE IF NOT EXISTS equipment_catalog (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    equipment_name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    standard_rate REAL NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1
+);
+
+-- equipment_name is a denormalized copy of the catalog name at the time of
+-- logging (not a FK) so history stays accurate even if catalog rates/names
+-- change later.
+CREATE TABLE IF NOT EXISTS consumables_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vessel_id INTEGER NOT NULL,
+    equipment_name TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT,
+    quantity REAL NOT NULL DEFAULT 1,
+    unit TEXT,
+    cost_per_unit REAL NOT NULL,
+    total_cost REAL NOT NULL,
+    notes TEXT,
+    logged_by TEXT,
+    logged_date TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (vessel_id) REFERENCES vessels(id)
+);
 """
 
 REQUEST_REASONS = ["New Work", "Design Change", "Damage Found", "Clarification", "Other"]
@@ -100,6 +128,20 @@ SEED_JOBS = [
     ("Pangaea", "24-0123", "Transducers"),
     ("Fidelis", "24-0456", "Underwater Hull"),
     ("Aegle", "24-0789", "Topsides"),
+]
+
+# Standard rates are placeholders (NZD) - editable by admin once a real rate
+# card exists; nothing here is load-bearing except unit/category grouping.
+SEED_EQUIPMENT = [
+    ("Scissor Lift", "Daily Rentals", "day", 180.0),
+    ("Forklift", "Daily Rentals", "day", 220.0),
+    ("Scaffolding", "Daily Rentals", "day", 150.0),
+    ("Confined Space Equipment", "Daily Rentals", "day", 120.0),
+    ("On-Site Storage", "Storage", "sqm/day", 5.0),
+    ("Off-Site Storage", "Storage", "sqm/day", 8.0),
+    ("Electrical Box Rental", "Electrical & Power", "day", 45.0),
+    ("Power Lead Rental", "Electrical & Power", "day", 15.0),
+    ("Generator", "Electrical & Power", "day", 95.0),
 ]
 
 
@@ -189,8 +231,24 @@ def seed_db():
     conn.close()
 
 
+def seed_equipment_catalog():
+    """Only seeds if the catalog is empty, so re-runs are safe."""
+    conn = get_db()
+    existing = conn.execute("SELECT COUNT(*) FROM equipment_catalog").fetchone()[0]
+    if existing == 0:
+        for equipment_name, category, unit, standard_rate in SEED_EQUIPMENT:
+            conn.execute(
+                """INSERT INTO equipment_catalog (equipment_name, category, unit, standard_rate)
+                   VALUES (?, ?, ?, ?)""",
+                (equipment_name, category, unit, standard_rate),
+            )
+        conn.commit()
+    conn.close()
+
+
 def setup():
     """Called on app startup - safe to call every time."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     init_db()
     seed_db()
+    seed_equipment_catalog()

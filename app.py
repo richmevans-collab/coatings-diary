@@ -6,7 +6,7 @@ Run locally with: python app.py
 Then open http://<your-laptop-ip>:5000 on a phone on the same wifi network.
 """
 import math
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, render_template, request, redirect, url_for
@@ -547,6 +547,237 @@ def boat_builder_history():
         start_date=start_date,
         end_date=end_date,
         total_worker_days=total_worker_days,
+    )
+
+
+def group_equipment_by_category(rows):
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(row["category"], []).append(row)
+    return grouped
+
+
+def calc_consumable_cost(quantity, cost_per_unit, start_date_str, end_date_str):
+    """duration in days is inclusive of both start and end date; a blank end
+    date means single-day use, per the spec."""
+    start = date.fromisoformat(start_date_str)
+    end = date.fromisoformat(end_date_str) if end_date_str else start
+    num_days = max((end - start).days + 1, 1)
+    return round(quantity * cost_per_unit * num_days, 2)
+
+
+@app.route("/equipment/log")
+def equipment_log_form():
+    conn = db.get_db()
+    vessels = conn.execute("SELECT * FROM vessels ORDER BY name").fetchall()
+    equipment_rows = conn.execute(
+        "SELECT * FROM equipment_catalog WHERE active = 1 ORDER BY category, equipment_name"
+    ).fetchall()
+    conn.close()
+
+    return render_template(
+        "equipment_log_form.html",
+        vessels=vessels,
+        equipment_by_category=group_equipment_by_category(equipment_rows),
+        entry=None,
+        today=date.today().isoformat(),
+    )
+
+
+@app.route("/equipment/log", methods=["POST"])
+def submit_equipment_log():
+    vessel_id = request.form.get("vessel_id", type=int)
+    equipment_name = request.form.get("equipment_name", "").strip()
+    start_date = request.form.get("start_date")
+    end_date = request.form.get("end_date") or None
+    quantity = float(request.form.get("quantity") or 1)
+    unit = request.form.get("unit", "").strip()
+    cost_per_unit = float(request.form.get("cost_per_unit") or 0)
+    notes = request.form.get("notes", "").strip() or None
+    logged_by = request.form.get("logged_by", "").strip() or None
+
+    total_cost = calc_consumable_cost(quantity, cost_per_unit, start_date, end_date)
+
+    conn = db.get_db()
+    cur = conn.execute(
+        """INSERT INTO consumables_log
+           (vessel_id, equipment_name, start_date, end_date, quantity, unit,
+            cost_per_unit, total_cost, notes, logged_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (vessel_id, equipment_name, start_date, end_date, quantity, unit,
+         cost_per_unit, total_cost, notes, logged_by),
+    )
+    conn.commit()
+    log_id = cur.lastrowid
+    conn.close()
+
+    return redirect(url_for("equipment_log_confirmation", log_id=log_id))
+
+
+@app.route("/equipment/log/confirmation/<int:log_id>")
+def equipment_log_confirmation(log_id):
+    conn = db.get_db()
+    entry = conn.execute(
+        """SELECT consumables_log.*, vessels.name AS vessel_name
+           FROM consumables_log JOIN vessels ON consumables_log.vessel_id = vessels.id
+           WHERE consumables_log.id = ?""",
+        (log_id,),
+    ).fetchone()
+    conn.close()
+
+    if entry is None:
+        return redirect(url_for("equipment_log_form"))
+
+    return render_template("equipment_log_confirmation.html", entry=entry)
+
+
+@app.route("/equipment/log/<int:log_id>/edit")
+def edit_equipment_log_form(log_id):
+    conn = db.get_db()
+    entry = conn.execute("SELECT * FROM consumables_log WHERE id = ?", (log_id,)).fetchone()
+    vessels = conn.execute("SELECT * FROM vessels ORDER BY name").fetchall()
+    equipment_rows = conn.execute(
+        "SELECT * FROM equipment_catalog WHERE active = 1 ORDER BY category, equipment_name"
+    ).fetchall()
+    conn.close()
+
+    if entry is None:
+        return redirect(url_for("equipment_history"))
+
+    return render_template(
+        "equipment_log_form.html",
+        vessels=vessels,
+        equipment_by_category=group_equipment_by_category(equipment_rows),
+        entry=entry,
+        today=date.today().isoformat(),
+    )
+
+
+@app.route("/equipment/log/<int:log_id>/edit", methods=["POST"])
+def update_equipment_log(log_id):
+    vessel_id = request.form.get("vessel_id", type=int)
+    equipment_name = request.form.get("equipment_name", "").strip()
+    start_date = request.form.get("start_date")
+    end_date = request.form.get("end_date") or None
+    quantity = float(request.form.get("quantity") or 1)
+    unit = request.form.get("unit", "").strip()
+    cost_per_unit = float(request.form.get("cost_per_unit") or 0)
+    notes = request.form.get("notes", "").strip() or None
+    logged_by = request.form.get("logged_by", "").strip() or None
+
+    total_cost = calc_consumable_cost(quantity, cost_per_unit, start_date, end_date)
+
+    conn = db.get_db()
+    conn.execute(
+        """UPDATE consumables_log
+           SET vessel_id = ?, equipment_name = ?, start_date = ?, end_date = ?, quantity = ?,
+               unit = ?, cost_per_unit = ?, total_cost = ?, notes = ?, logged_by = ?
+           WHERE id = ?""",
+        (vessel_id, equipment_name, start_date, end_date, quantity, unit,
+         cost_per_unit, total_cost, notes, logged_by, log_id),
+    )
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("equipment_history"))
+
+
+@app.route("/equipment/log/<int:log_id>/delete", methods=["POST"])
+def delete_equipment_log(log_id):
+    conn = db.get_db()
+    conn.execute("DELETE FROM consumables_log WHERE id = ?", (log_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("equipment_history"))
+
+
+@app.route("/equipment/history")
+def equipment_history():
+    vessel_id = request.args.get("vessel_id", type=int)
+    start_date = request.args.get("start_date") or None
+    end_date = request.args.get("end_date") or None
+    equipment_search = request.args.get("equipment") or None
+
+    query = """SELECT consumables_log.*, vessels.name AS vessel_name
+               FROM consumables_log JOIN vessels ON consumables_log.vessel_id = vessels.id
+               WHERE 1=1"""
+    params = []
+    if vessel_id:
+        query += " AND consumables_log.vessel_id = ?"
+        params.append(vessel_id)
+    if start_date:
+        query += " AND date(consumables_log.start_date) >= date(?)"
+        params.append(start_date)
+    if end_date:
+        query += " AND date(consumables_log.start_date) <= date(?)"
+        params.append(end_date)
+    if equipment_search:
+        query += " AND consumables_log.equipment_name LIKE ?"
+        params.append(f"%{equipment_search}%")
+    query += " ORDER BY consumables_log.start_date DESC"
+
+    conn = db.get_db()
+    vessels = conn.execute("SELECT * FROM vessels ORDER BY name").fetchall()
+    entries = conn.execute(query, params).fetchall()
+    conn.close()
+
+    summary = {}
+    grand_total = 0.0
+    for entry in entries:
+        summary[entry["equipment_name"]] = summary.get(entry["equipment_name"], 0.0) + entry["total_cost"]
+        grand_total += entry["total_cost"]
+
+    return render_template(
+        "equipment_history.html",
+        entries=entries,
+        vessels=vessels,
+        selected_vessel_id=vessel_id,
+        start_date=start_date,
+        end_date=end_date,
+        equipment_search=equipment_search or "",
+        summary=sorted(summary.items(), key=lambda item: -item[1]),
+        grand_total=grand_total,
+    )
+
+
+@app.route("/equipment/report")
+def equipment_weekly_report():
+    vessel_id = request.args.get("vessel_id", type=int)
+    week_start_str = request.args.get("week_start")
+    if week_start_str:
+        week_start = date.fromisoformat(week_start_str)
+    else:
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())  # Monday of this week
+    week_end = week_start + timedelta(days=6)
+
+    query = """SELECT consumables_log.*, vessels.id AS v_id, vessels.name AS vessel_name
+               FROM consumables_log JOIN vessels ON consumables_log.vessel_id = vessels.id
+               WHERE date(consumables_log.start_date) BETWEEN date(?) AND date(?)"""
+    params = [week_start.isoformat(), week_end.isoformat()]
+    if vessel_id:
+        query += " AND consumables_log.vessel_id = ?"
+        params.append(vessel_id)
+    query += " ORDER BY vessels.name, consumables_log.start_date"
+
+    conn = db.get_db()
+    vessels = conn.execute("SELECT * FROM vessels ORDER BY name").fetchall()
+    entries = conn.execute(query, params).fetchall()
+    conn.close()
+
+    vessel_groups = {}
+    for entry in entries:
+        group = vessel_groups.setdefault(entry["vessel_name"], {"entries": [], "total": 0.0})
+        group["entries"].append(entry)
+        group["total"] += entry["total_cost"]
+
+    return render_template(
+        "equipment_weekly_report.html",
+        vessel_groups=vessel_groups,
+        vessels=vessels,
+        selected_vessel_id=vessel_id,
+        week_start=week_start.isoformat(),
+        week_end=week_end.isoformat(),
     )
 
 
